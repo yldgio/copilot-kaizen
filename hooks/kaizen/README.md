@@ -1,5 +1,7 @@
 # Kaizen Hook System
 
+> ⬆️ For full documentation, install instructions, and the flow diagram, see the [root README](../../README.md).
+
 > *改善* — continuous improvement
 
 AI coding sessions are amnesiac by default. Each session starts fresh — no memory of what worked, what broke, which tools you reach for most, or what patterns your team has settled on. **Kaizen** fixes that.
