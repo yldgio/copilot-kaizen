@@ -1,3 +1,9 @@
+# SQLite databases
+*.db
+*.db-shm
+*.db-wal
+.kaizen/
+
 # OS
 .DS_Store
 Thumbs.db
