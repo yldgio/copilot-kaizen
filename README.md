@@ -19,7 +19,7 @@ Observe → Reflect → Improve → Observe better
 ### As a Copilot CLI Plugin (recommended)
 
 ```bash
-copilot plugin install YOUR_GITHUB_USER/copilot-hooks
+copilot plugin install yldgio/copilot-hooks
 ```
 
 Or from a local clone:
