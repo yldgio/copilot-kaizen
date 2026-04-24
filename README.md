@@ -198,7 +198,7 @@ export SKIP_KAIZEN=1
 
 | Dependency | Bash | PowerShell | Notes |
 |-----------|------|-----------|-------|
-| `sqlite3` | Required | Required | macOS/Linux: pre-installed. Windows: `winget install SQLite.SQLite` |
+| `sqlite3` | Required | Required | macOS: pre-installed. Linux: `apt install sqlite3` / `dnf install sqlite`. Windows: `winget install SQLite.SQLite` |
 | `jq` | Optional | Not used | Falls back to `python3`/`python`, then `sed` |
 | `python3`/`python` | Optional fallback | Not used | Used when `jq` is absent |
 | `git` | Optional | Optional | Used only to resolve repo name from remote |
