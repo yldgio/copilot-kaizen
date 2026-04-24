@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "hooks": {
+    "sessionStart": [{
+      "type": "command",
+      "bash":        ".github/hooks/kaizen/kaizen.sh sessionStart",
+      "powershell":  ".github/hooks/kaizen/kaizen.ps1 sessionStart",
+      "cwd": ".", "timeoutSec": 5
+    }],
+    "userPromptSubmitted": [{
+      "type": "command",
+      "bash":        ".github/hooks/kaizen/kaizen.sh userPromptSubmitted",
+      "powershell":  ".github/hooks/kaizen/kaizen.ps1 userPromptSubmitted",
+      "cwd": ".", "timeoutSec": 2
+    }],
+    "preToolUse": [{
+      "type": "command",
+      "bash":        ".github/hooks/kaizen/kaizen.sh preToolUse",
+      "powershell":  ".github/hooks/kaizen/kaizen.ps1 preToolUse",
+      "cwd": ".", "timeoutSec": 2
+    }],
+    "postToolUse": [{
+      "type": "command",
+      "bash":        ".github/hooks/kaizen/kaizen.sh postToolUse",
+      "powershell":  ".github/hooks/kaizen/kaizen.ps1 postToolUse",
+      "cwd": ".", "timeoutSec": 3
+    }],
+    "errorOccurred": [{
+      "type": "command",
+      "bash":        ".github/hooks/kaizen/kaizen.sh errorOccurred",
+      "powershell":  ".github/hooks/kaizen/kaizen.ps1 errorOccurred",
+      "cwd": ".", "timeoutSec": 3
+    }],
+    "sessionEnd": [{
+      "type": "command",
+      "bash":        ".github/hooks/kaizen/kaizen.sh sessionEnd",
+      "powershell":  ".github/hooks/kaizen/kaizen.ps1 sessionEnd",
+      "cwd": ".", "timeoutSec": 10
+    }]
+  }
+}
