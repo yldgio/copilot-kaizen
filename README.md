@@ -19,7 +19,7 @@ Observe → Reflect → Improve → Observe better
 ### As a Copilot CLI Plugin (recommended)
 
 ```bash
-copilot plugin install yldgio/copilot-hooks
+copilot plugin install yldgio/copilot-kaizen
 ```
 
 Or from a local clone:
