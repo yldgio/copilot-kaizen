@@ -1,0 +1,10 @@
+{
+  "name": "kaizen",
+  "description": "Continuous-improvement hook for Copilot CLI. Captures tool-usage observations in SQLite and surfaces structured insights at every session start.",
+  "version": "1.0.0",
+  "author": {
+    "name": "Giovanni Ferrara"
+  },
+  "license": "MIT",
+  "keywords": ["kaizen", "hooks", "memory", "continuous-improvement", "sqlite"]
+}

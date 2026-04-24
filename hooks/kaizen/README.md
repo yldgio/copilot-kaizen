@@ -16,7 +16,34 @@ Observe → Reflect → Improve → Observe better
 
 ## Quick Start
 
-### Bash (Linux / macOS / Windows+GitBash)
+### Install as a Plugin (recommended)
+
+Install directly from the repository — no file copying needed:
+
+```bash
+copilot plugin install YourGitHubUser/copilot-hooks
+```
+
+Or from a local clone:
+
+```bash
+copilot plugin install /path/to/copilot-hooks
+```
+
+Verify the plugin loaded:
+
+```bash
+copilot plugin list
+# → kaizen (v1.0.0)
+```
+
+The hooks are active immediately in your next session.
+
+---
+
+### Manual Install (copy files into a target repo)
+
+#### Bash (Linux / macOS / Windows+GitBash)
 
 ```bash
 # From your target repo root:
@@ -27,7 +54,7 @@ cp /path/to/kaizen/hooks.json  .github/hooks/kaizen.json
 chmod +x .github/hooks/kaizen/kaizen.sh
 ```
 
-### PowerShell (Windows / pwsh everywhere)
+#### PowerShell (Windows / pwsh everywhere)
 
 ```powershell
 # From your target repo root:
