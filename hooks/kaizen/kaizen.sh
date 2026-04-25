@@ -89,6 +89,9 @@ CREATE INDEX IF NOT EXISTS idx_kp_exported     ON kaizen_procedures(exported);
 -- Unique key enables atomic ON CONFLICT upserts for errorOccurred
 CREATE UNIQUE INDEX IF NOT EXISTS idx_ke_upsert ON kaizen_entries(category, content);
 " 2>/dev/null || true
+
+    # Phase 2: add last_applied_at (idempotent — fails silently if column exists)
+    sqlite3 "$db" "ALTER TABLE kaizen_procedures ADD COLUMN last_applied_at TEXT;" 2>/dev/null || true
 }
 
 # ── JSON parsing ─────────────────────────────────────────────────────────────
@@ -209,7 +212,7 @@ WHERE hit_count >= 10 AND crystallized = 0;
     fi
 
     # Synchronous read of top observations for agent context
-    local entries local_entries all_entries count
+    local entries local_entries all_entries obs_count
 
     entries="$(sqlite3 "$GLOBAL_DB" "
 SELECT category || ': ' || content FROM kaizen_entries
@@ -228,16 +231,52 @@ ORDER BY hit_count DESC, last_seen DESC LIMIT 5;
     [[ -n "$local_entries" ]] && all_entries="${all_entries}
 ${local_entries}"
 
-    count=0
+    obs_count=0
     if [[ -n "$all_entries" ]]; then
-        count="$(printf '%s\n' "$all_entries" | grep -c .)" || count=0
+        obs_count="$(printf '%s\n' "$all_entries" | grep -c .)" || obs_count=0
     fi
 
-    printf '⚡ Kaizen — %d observations loaded\n' "$count"
+    # Phase 2: query crystallized procedures (hybrid: 3 unvalidated + 2 proven)
+    local procs_unvalidated procs_proven all_procs proc_count
+    procs_unvalidated="$(sqlite3 "$GLOBAL_DB" "
+SELECT id || '|' || category || ': ' || content FROM kaizen_procedures
+WHERE applied_count = 0
+ORDER BY crystallized_at DESC LIMIT 3;
+" 2>/dev/null || true)"
+
+    procs_proven="$(sqlite3 "$GLOBAL_DB" "
+SELECT id || '|' || category || ': ' || content FROM kaizen_procedures
+WHERE applied_count > 0
+ORDER BY last_applied_at DESC LIMIT 2;
+" 2>/dev/null || true)"
+
+    all_procs="${procs_unvalidated}"
+    [[ -n "$procs_proven" ]] && { [[ -n "$all_procs" ]] && all_procs="${all_procs}
+${procs_proven}" || all_procs="${procs_proven}"; }
+
+    proc_count=0
+    if [[ -n "$all_procs" ]]; then
+        proc_count="$(printf '%s\n' "$all_procs" | grep -c .)" || proc_count=0
+    fi
+
+    # Print combined summary
+    printf '⚡ Kaizen — %d procedures, %d observations\n' "$proc_count" "$obs_count"
+    if [[ -n "$all_procs" ]]; then
+        while IFS= read -r line; do
+            if [[ -n "$line" ]]; then
+                local p_id="${line%%|*}"
+                local p_text="${line#*|}"
+                printf '  📋 [%s] %s\n' "$p_id" "$p_text"
+            fi
+        done <<< "$all_procs"
+    fi
     if [[ -n "$all_entries" ]]; then
         while IFS= read -r line; do
             [[ -n "$line" ]] && printf '  • %s\n' "$line"
         done <<< "$all_entries"
+    fi
+    if [[ "$proc_count" -gt 0 ]]; then
+        printf 'Mark a procedure as applied: kaizen-mark --applied <id>\n'
     fi
 }
 
@@ -385,7 +424,16 @@ WHERE ts < datetime('now', '-7 days');
 DELETE FROM kaizen_entries
 WHERE last_seen  < datetime('now', '-60 days')
   AND hit_count  < 3
-  AND crystallized = 0;" 2>/dev/null
+  AND crystallized = 0;
+
+-- Phase 2: procedure decay
+DELETE FROM kaizen_procedures
+WHERE applied_count = 0
+  AND crystallized_at < datetime('now', '-90 days');
+
+DELETE FROM kaizen_procedures
+WHERE applied_count > 0
+  AND last_applied_at < datetime('now', '-60 days');" 2>/dev/null
         fi
     ) &
     disown $!
