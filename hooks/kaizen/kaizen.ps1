@@ -96,7 +96,7 @@ function Initialize-KaizenDB {
     param([string]$db)
     try { & sqlite3 $db $SCHEMA_SQL 2>&1 | Out-Null } catch {}
     # Phase 2: add last_applied_at (idempotent — fails silently if column exists)
-    try { & sqlite3 $db "ALTER TABLE kaizen_procedures ADD COLUMN last_applied_at TEXT;" 2>&1 | Out-Null } catch {}
+    try { & sqlite3 $db "PRAGMA busy_timeout=5000; ALTER TABLE kaizen_procedures ADD COLUMN last_applied_at TEXT;" 2>&1 | Out-Null } catch {}
 }
 
 # ── Helpers ───────────────────────────────────────────────────────────────────

@@ -91,7 +91,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_ke_upsert ON kaizen_entries(category, cont
 " 2>/dev/null || true
 
     # Phase 2: add last_applied_at (idempotent — fails silently if column exists)
-    sqlite3 "$db" "ALTER TABLE kaizen_procedures ADD COLUMN last_applied_at TEXT;" 2>/dev/null || true
+    sqlite3 "$db" "PRAGMA busy_timeout=5000; ALTER TABLE kaizen_procedures ADD COLUMN last_applied_at TEXT;" 2>/dev/null || true
 }
 
 # ── JSON parsing ─────────────────────────────────────────────────────────────

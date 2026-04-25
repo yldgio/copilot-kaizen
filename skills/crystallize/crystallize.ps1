@@ -45,7 +45,9 @@ $exportedCount = 0
 $successIds    = @()
 
 foreach ($cat in $groups.Keys) {
-    $catFile = Join-Path $outDir "$cat.md"
+    $safeCat = $cat -replace '[^A-Za-z0-9_\-]', '_'
+    if (-not $safeCat) { continue }
+    $catFile = Join-Path $outDir "$safeCat.md"
     $lines = @()
     $lines += "# Kaizen Procedures — $cat"
     $lines += ''
@@ -71,4 +73,4 @@ if ($successIds.Count -gt 0) {
     } catch {}
 }
 
-Write-Output "📋 Exported $exportedCount procedures to .kaizen/procedures/"
+Write-Output "📋 Exported $($successIds.Count) procedures to .kaizen/procedures/"
