@@ -2,7 +2,8 @@
 *.db
 *.db-shm
 *.db-wal
-.kaizen/
+.kaizen/*.db
+.kaizen/**/*.db
 
 # OS
 .DS_Store
@@ -41,3 +42,8 @@ temp/
 secrets.*
 *.key
 *.pem
+docs/github-copilot-sdk.md
+docs/hooks-doc.txt
+https-www-youngleaders-tech-p-how-i-finally-sorted.md
+KAIZEN_MEMORY_PLAN.md
+IMPLEMENTATION_PLAN.md

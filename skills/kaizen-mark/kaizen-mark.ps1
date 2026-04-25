@@ -24,10 +24,10 @@ if ($idInt -le 0) { exit 0 }
 
 $changed = 0
 try {
-    $result = & sqlite3 $GLOBAL_DB "PRAGMA busy_timeout=5000; UPDATE kaizen_procedures SET applied_count = applied_count + 1, last_applied_at = datetime('now') WHERE id = $idInt; SELECT changes();" 2>$null
+    $result = & sqlite3 $GLOBAL_DB "PRAGMA busy_timeout=5000; UPDATE kaizen_entries SET applied_count = COALESCE(applied_count, 0) + 1, last_applied_at = datetime('now') WHERE id = $idInt AND crystallized = 1; SELECT changes();" 2>$null
     $changed = [int]($result | Select-Object -Last 1)
 } catch { exit 0 }
 
 if ($changed -le 0) { exit 0 }
 
-Write-Output "✅ Marked procedure #$idInt as applied"
+Write-Output "✅ Marked entry #$idInt as applied"

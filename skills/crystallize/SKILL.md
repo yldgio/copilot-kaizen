@@ -1,30 +1,33 @@
 ---
 name: crystallize
 description: >
-  Export Kaizen procedures to .kaizen/procedures/*.md files so the team can review and commit them to git.
+  Reorganize Kaizen memory files and display the merged knowledge index.
   Use this skill whenever the user wants to share, export, document, or commit what Kaizen has learned —
   including phrases like "export our learnings", "document what kaizen knows", "share procedures with the team",
-  "wrap up the sprint", "prep for retro", "commit kaizen to git", or "what has kaizen learned?".
+  "wrap up the sprint", "prep for retro", "commit kaizen to git", "what has kaizen learned?", or "reorganize memory".
   Also invoke proactively before PRs, releases, or sprint reviews without waiting to be asked.
 ---
 
 # Crystallize
 
-Crystallize exports high-signal Kaizen procedures (observations that crossed `hit_count ≥ 10` and were promoted
-to `kaizen_procedures`) into human-readable markdown files under `.kaizen/procedures/`, grouped by category.
-The team can then review, edit, and commit these files to git so every teammate benefits at their next session start.
+Crystallize reorganizes Kaizen's file-based memory (deduplicates entries, sorts by date, rebuilds the
+`kaizen.md` index) and prints the merged knowledge index so the team can review and commit it.
 
-## Check first: is there anything to export?
+Memory files live under:
+- **Global**: `~/.copilot/kaizen/` — cross-project knowledge
+- **Local**: `.kaizen/` in the project root — project-specific knowledge (committable)
 
-If you want to confirm there are unexported procedures before running, query the DB:
+## Check first: is there any memory?
+
+Check if memory files exist:
 
 ```bash
-sqlite3 ~/.copilot/kaizen.db "SELECT COUNT(*) FROM kaizen_procedures WHERE exported = 0;"
+ls ~/.copilot/kaizen/kaizen.md .kaizen/kaizen.md 2>/dev/null
 ```
 
-If the result is `0`, there is nothing new to export — either all procedures are already exported, or no
-observations have yet crossed the `hit_count ≥ 10` threshold. Tell the user this clearly and explain that
-procedures accumulate automatically as errors and patterns repeat across sessions.
+If neither file exists, there is nothing to reorganize — no observations have yet crossed the `hit_count ≥ 10`
+crystallization threshold. Tell the user this clearly and explain that memory accumulates automatically as
+errors and patterns repeat across sessions.
 
 ## How to invoke
 
@@ -40,21 +43,37 @@ bash skills/crystallize/crystallize.sh
 pwsh skills/crystallize/crystallize.ps1
 ```
 
-The script is idempotent — safe to run multiple times. It only writes procedures with `exported = 0`
-and marks them atomically, so a second run does nothing.
+The script is idempotent — safe to run multiple times. It deduplicates entries and rebuilds the index.
 
 ## What to expect
 
 ```
-📋 Exported N procedures to .kaizen/procedures/
+⚡ Kaizen reorganize complete
+  • general.md: 5 entries (removed 2 duplicates)
+  • tools/bash.md: 3 entries
+  • kaizen.md: index updated (2 files)
+
+📚 Merged Kaizen Memory Index:
+
+— Global —
+# Kaizen Memory Index
+- general.md — cross-project conventions and recorded mistakes (5 entries)
+- tools/bash.md — bash tool insights (3 entries)
+
+— Local —
+# Kaizen Memory Index
+- domain/copilot-kaizen.md — copilot-kaizen knowledge (2 entries)
+
+📋 Memory reorganized. Review .kaizen/ and git add .kaizen/*.md
 ```
 
-Files written per category, e.g. `.kaizen/procedures/pattern.md`, `.kaizen/procedures/mistake.md`.
-Each file lists all procedures for that category as bullet points with a datestamp header.
+## After reorganizing
 
-## After exporting
+1. Show the user the merged index
+2. Suggest reviewing and editing the `.kaizen/*.md` files — any entry can be removed if it no longer applies
+3. Commit to git: `git add .kaizen/ && git commit -m "chore: update kaizen memory files"`
 
-1. Show the user which files were written
-2. Suggest reviewing and editing them — any entry can be removed if it no longer applies
-3. Commit to git: `git add .kaizen/procedures/ && git commit -m "chore: export kaizen procedures"`
-4. Optionally suggest adding `.kaizen/kaizen.db` to `.gitignore` if the team prefers not to track raw DB state
+## Deprecated: .kaizen/procedures/
+
+The old `.kaizen/procedures/` output path is no longer used. Existing files there are NOT deleted
+automatically — developers may keep them for reference or remove them manually.

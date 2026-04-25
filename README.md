@@ -96,39 +96,65 @@ Kaizen registers six lifecycle events. Each handler is designed to exit in **mil
 
 ## Two-Tier Memory
 
-Kaizen maintains **two SQLite databases**:
+Kaizen maintains two storage layers: **SQLite** for accumulation and counting, and **Markdown files** for crystallized knowledge.
+
+### SQLite databases
 
 | | Global `~/.copilot/kaizen.db` | Local `.kaizen/kaizen.db` |
 |--|-------------------------------|---------------------------|
 | **Scope** | All repos on this machine | This repo only |
-| **What lives here** | Errors, patterns, tool insights, session metadata | Repo-specific conventions, team preferences |
+| **What lives here** | Raw observations, tool logs, session metadata | Repo-specific raw observations |
 | **Read by** | All session starts | Session starts (when file exists) |
 | **Written by** | All events | Your team, manually |
-| **Team sharing** | Not shared | Commit `.kaizen/kaizen.db` to share with your team |
+| **Team sharing** | Not shared | Commit `.kaizen/*.md` to share with your team |
 
 ### DB writes by event
 
 | Event | Global DB | Local DB |
 |-------|-----------|----------|
-| `sessionStart` | READ entries; INSERT session; WRITE procedures | READ entries |
+| `sessionStart` | READ entries; INSERT session; WRITE crystallized entries to memory files | READ entries |
 | `userPromptSubmitted` | UPDATE session `prompt_count` | — |
-| `preToolUse` | INSERT tool log (`result='pre'`) | — |
+| `preToolUse` | INSERT tool log (`result='pre'`); INJECT tool memory file if first use | — |
 | `postToolUse` | INSERT tool log (actual result) | — |
 | `errorOccurred` | UPSERT mistake entry; UPDATE session `error_count` | — |
-| `sessionEnd` | UPDATE session; INSERT tool insights; DELETE old rows | — |
+| `sessionEnd` | UPDATE session; INSERT tool insights; WRITE new crystallized entries to files; DELETE old rows | — |
+
+### Memory files
+
+When an observation reaches `hit_count ≥ 10` it is **crystallized**— written to a Markdown file and injected into future sessions on demand:
+
+```
+~/.copilot/kaizen/        ← global memory (all repos)
+  kaizen.md               ← index: one line per topic file
+  general.md              ← cross-project conventions and mistakes
+  tools/
+    bash.md               ← insights for the bash tool
+    {tool_name}.md        ← one file per tool that has crystallized observations
+  domain/
+    {topic}.md            ← project or domain-specific knowledge
+
+.kaizen/                  ← project-local memory (this repo, committed)
+  kaizen.md               ← local index (same format, scoped to this project)
+  general.md
+  tools/
+  domain/
+  kaizen.db               ← raw observations DB (gitignored)
+```
+
+At `sessionStart`, the merged global + local `kaizen.md` index is injected into the agent context. At `preToolUse`, the relevant `tools/{tool}.md` file is injected the first time each tool is called.
 
 ---
 
 ## How Observations Compound
 
-The `hit_count` field is the core signal. Every time the same error is seen again, `hit_count` increments. When it reaches **10**, the entry is auto-crystallized into `kaizen_procedures` at the next `sessionStart`.
+The `hit_count` field is the core signal. Every time the same error is seen again, `hit_count` increments. When it reaches **10**, the entry is auto-crystallized into the appropriate memory file (`general.md`, `tools/{name}.md`, or `domain/{topic}.md`) at the next `sessionStart` or `sessionEnd`.
 
 | When | What happens |
 |------|-------------|
 | **Day 1** | A `NetworkTimeoutError` appears once. `hit_count = 1`. |
 | **Week 2** | Same error seen 7 more times. `hit_count = 8`. Starts surfacing in top-5. |
-| **Month 2** | `hit_count` hits 10. Auto-crystallized into `kaizen_procedures` at next session start. |
-| **Month 3** | The crystallized procedure has `applied_count = 12`. Agent has been acting on it every session. |
+| **Month 2** | `hit_count` hits 10. Auto-crystallized: written to `general.md` (or `tools/{name}.md`) at next `sessionStart` or `sessionEnd`. |
+| **Month 3** | The entry has `applied_count = 12`. Agent has been acting on it every session. |
 
 Low-signal entries (`hit_count < 3`) older than 60 days are pruned automatically. Only signal survives.
 
@@ -167,27 +193,85 @@ VALUES ('local', 'pattern', 'Use Result<T> not exceptions for expected failures'
 
 Phase 1 observes and remembers. Phase 2 closes the feedback loop.
 
-### Crystallized Procedures
+### Crystallized Memory Files
 
-When an observation hits `hit_count ≥ 10`, it is auto-promoted to `kaizen_procedures` at the next session start. Procedures are surfaced at every session start — higher priority than raw observations.
+When an observation hits `hit_count ≥ 10`, it is auto-promoted at the next `sessionStart` or `sessionEnd` — written to the appropriate memory file and injected into future sessions on demand. The memory is routed by category:
+
+| Category | Memory file |
+|----------|-------------|
+| `tool_insight` | `tools/{tool_name}.md` |
+| `mistake` | `general.md` |
+| other | `domain/{category}.md` |
 
 ### Skills
 
 | Skill | What it does |
 |-------|-------------|
-| `crystallize` | Exports all unexported procedures to `.kaizen/procedures/<category>.md` — human-readable, committable, shareable with your team |
-| `kaizen-mark --applied <id>` | Marks a procedure as applied after the agent acts on it. Increments `applied_count` and records `last_applied_at` |
+| `crystallize` | Runs `reorganize` on the memory hierarchy (dedup, merge, sort), then prints the merged `kaizen.md` index — human-readable, committable, shareable with your team |
+| `kaizen-mark --applied <id>` | Marks a crystallized entry as applied after the agent acts on it. Increments `applied_count` on `kaizen_entries` and records `last_applied_at` |
 
-### Procedure Lifecycle
+### Observation Lifecycle
 
-1. **Observation** — errors, patterns, tool insights accumulate with `hit_count`
-2. **Crystallization** — at `hit_count ≥ 10`, promoted to `kaizen_procedures`
-3. **Surfacing** — shown at every session start (3 newest unvalidated + 2 most recently applied)
-4. **Application** — agent marks procedures as applied via `kaizen-mark`
-5. **Export** — `crystallize` skill writes `.kaizen/procedures/*.md` for team sharing
-6. **Decay** — unused procedures are pruned (90 days if never applied, 60 days since last application)
+1. **Observation** — errors, patterns, tool insights accumulate with `hit_count` in `kaizen_entries`
+2. **Crystallization** — at `hit_count ≥ 10`, written to a memory `.md` file; `kaizen_entries.crystallized = 1`
+3. **Surfacing** — at `sessionStart`: merged `kaizen.md` index injected; at `preToolUse`: relevant `tools/{name}.md` injected on first use of each tool
+4. **Application** — agent marks entries as applied via `kaizen-mark --applied <id>`
+5. **Team sharing** — `crystallize` reorganizes files; `git add .kaizen/*.md` shares with the team
+6. **Decay** — low-signal observations pruned (60 days, `hit_count < 3`, never applied)
 
-The loop: better observations → better procedures → better sessions → better observations.
+The loop: better observations → better memory files → better sessions → better observations.
+
+---
+
+## Memory Files
+
+Kaizen stores crystallized knowledge as human-readable markdown files that can be committed to git.
+
+### File hierarchy
+
+```
+~/.copilot/kaizen/              ← global (cross-project)
+  kaizen.md                     ← index: one line per topic file
+  general.md                    ← cross-project conventions, mistakes
+  tools/{tool_name}.md          ← per-tool observations
+  domain/{topic}.md             ← domain-specific knowledge
+
+.kaizen/                        ← project-local (committable)
+  kaizen.md                     ← local index
+  general.md                    ← project-level conventions
+  tools/{tool_name}.md          ← project-scoped tool observations
+  domain/{topic}.md             ← project knowledge
+```
+
+### How entries are routed
+
+| Category | Target file | Notes |
+|----------|-------------|-------|
+| `tool_insight` | `tools/{tool_name}.md` | Tool name extracted from content |
+| `mistake` | `general.md` | Mistakes are cross-cutting |
+| Other | `domain/{category}.md` | Category becomes topic name |
+
+### Sharing with the team
+
+```bash
+# Reorganize and review
+bash skills/crystallize/crystallize.sh
+
+# Commit project memory
+git add .kaizen/*.md .kaizen/**/*.md
+git commit -m "chore: update kaizen memory files"
+```
+
+### .gitignore
+
+Add these lines to your project's `.gitignore`:
+
+```
+.kaizen/*.db
+.kaizen/**/*.db
+```
+
+This keeps SQLite databases out of git while allowing the markdown memory files to be committed and shared.
 
 ---
 
@@ -228,10 +312,10 @@ flowchart TD
     B --> C{source == 'resume'?}
 
     C -- yes --> D[Load memories only\nSkip session registration]
-    C -- no --> E[INSERT kaizen_sessions\nAuto-crystallize hit_count ≥ 10\ninto kaizen_procedures]
-    D & E --> F[SELECT top 5 global entries\nSELECT top 5 local entries\nif .kaizen/kaizen.db exists]
-    F --> F2[SELECT top 3 unvalidated procedures\nSELECT top 2 proven procedures]
-    F2 --> G[Print ⚡ Kaizen summary\nProcedures + observations\nWrite session_id to tmp file]
+    C -- no --> E[INSERT kaizen_sessions\nAuto-crystallize hit_count ≥ 10\ninto memory files]
+    D & E --> F[Write crystallized entries to memory files\nInject merged kaizen.md index\nSELECT top 5 local entries if .kaizen/kaizen.db exists]
+    F --> F2[SELECT top 5 crystallized entries\nfrom kaizen_entries WHERE crystallized=1\nfor numbered 📋 surfacing]
+    F2 --> G[Print ⚡ Kaizen summary\nIndex + numbered entries\nWrite session_id to tmp file]
 
     G --> H([User sends a prompt])
     H --> I[/userPromptSubmitted event\nJSON: timestamp · cwd · prompt/]
@@ -259,7 +343,7 @@ flowchart TD
 
     W --> X{reason == 'abort'\nor 'timeout'?}
     X -- yes --> Y[Skip decay/compact\nFlush stats only]
-    X -- no --> Z[Compact: prune kaizen_tool_log > 7 days\nDecay: delete low-signal entries > 60 days\nDecay: prune stale procedures]
+    X -- no --> Z[Compact: prune kaizen_tool_log > 7 days\nDecay: delete low-signal entries > 60 days\nWrite newly crystallized entries to memory files]
     Y & Z --> AA[Print ⚡ Kaizen summary\nRemove tmp session_id file]
     AA --> AB([Done])
 
@@ -285,10 +369,24 @@ copilot-hooks/
 └── skills/
     ├── crystallize/
     │   ├── SKILL.md             ← skill definition (official format)
-    │   ├── crystallize.sh       ← bash implementation
-    │   └── crystallize.ps1      ← PowerShell implementation
+    │   ├── crystallize.sh       ← runs reorganize + prints merged kaizen.md index
+    │   └── crystallize.ps1      ← PowerShell equivalent
     └── kaizen-mark/
         ├── SKILL.md             ← skill definition (official format)
-        ├── kaizen-mark.sh       ← bash implementation
-        └── kaizen-mark.ps1      ← PowerShell implementation
+        ├── kaizen-mark.sh       ← marks kaizen_entries.applied_count + 1
+        └── kaizen-mark.ps1      ← PowerShell equivalent
+
+# Memory files written by the hooks (not part of this repo):
+~/.copilot/kaizen/               ← global memory (per machine)
+  kaizen.md                      ← index injected at every sessionStart
+  general.md                     ← cross-project mistakes + conventions
+  tools/{tool_name}.md           ← per-tool insights (injected at first preToolUse)
+  domain/{topic}.md              ← project/domain knowledge
+
+.kaizen/                         ← project-local memory (per repo)
+  kaizen.md                      ← local index (committed)
+  general.md                     ← project conventions (committed)
+  tools/{tool_name}.md           ← project-scoped tool insights (committed)
+  domain/{topic}.md              ← project/domain knowledge (committed)
+  kaizen.db                      ← raw observations SQLite DB (gitignored)
 ```

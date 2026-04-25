@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.2.0] — 2026-04-25
+
+### Added
+- Hierarchical file-based memory: `~/.copilot/kaizen/` (global) + `.kaizen/` (project-local)
+- Memory file routing: `tool_insight` → `tools/{name}.md`, `mistake` → `general.md`, else → `domain/{topic}.md`
+- `kaizen.md` index file: auto-generated table of contents for memory files
+- `preToolUse` injects per-tool memory files once per session
+- `reorganize` event: dedup, merge, sort, and reindex memory files
+- `applied_count` and `last_applied_at` columns on `kaizen_entries`
+- `crystallized_at` column on `kaizen_entries`
+- One-time migration from `kaizen_procedures` to memory files
+- Backfill of `applied_count` from `kaizen_procedures` to `kaizen_entries`
+
+### Changed
+- `sessionStart` now outputs merged `kaizen.md` index (global + local) with fallback to raw observations
+- `sessionStart` numbered entries now source from `kaizen_entries` instead of `kaizen_procedures`
+- `sessionEnd` crystallizes newly-eligible entries to memory files
+- `sessionEnd` decay rule now checks `applied_count` on `kaizen_entries`
+- `crystallize` skill repurposed as memory reorganizer (calls `reorganize`, prints index)
+- `kaizen-mark` skill retargeted to `kaizen_entries` instead of `kaizen_procedures`
+- `.gitignore` updated: `.kaizen/` → `.kaizen/*.db` (allows committing `.kaizen/*.md`)
+
+### Deprecated
+- `kaizen_procedures` table retained but inert — no new rows inserted
+- `.kaizen/procedures/` output path no longer written
+
+---
+
 ## [1.1.0] — 2026-04-25
 
 ### Added

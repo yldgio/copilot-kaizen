@@ -92,6 +92,11 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_ke_upsert ON kaizen_entries(category, cont
 
     # Phase 2: add last_applied_at (idempotent — fails silently if column exists)
     sqlite3 "$db" "PRAGMA busy_timeout=5000; ALTER TABLE kaizen_procedures ADD COLUMN last_applied_at TEXT;" 2>/dev/null || true
+
+    # Phase 3: add columns to kaizen_entries for file-based memory
+    sqlite3 "$db" "PRAGMA busy_timeout=5000; ALTER TABLE kaizen_entries ADD COLUMN applied_count INTEGER DEFAULT 0;" 2>/dev/null || true
+    sqlite3 "$db" "PRAGMA busy_timeout=5000; ALTER TABLE kaizen_entries ADD COLUMN last_applied_at TEXT;" 2>/dev/null || true
+    sqlite3 "$db" "PRAGMA busy_timeout=5000; ALTER TABLE kaizen_entries ADD COLUMN crystallized_at TEXT;" 2>/dev/null || true
 }
 
 # ── JSON parsing ─────────────────────────────────────────────────────────────
@@ -157,9 +162,140 @@ _input_cwd="$(_json_get "$INPUT" ".cwd")"
 _cwd_key="$(basename "${_input_cwd:-.}" | tr -cs '[:alnum:]' '_' | head -c 24)"
 [[ -z "$_cwd_key" ]] && _cwd_key="root"
 KAIZEN_SESSION_FILE="${TMPDIR:-/tmp}/kaizen_session_${_cwd_key}"
+KAIZEN_INJECTED_FILE="${TMPDIR:-/tmp}/kaizen_injected_${_cwd_key}"
 
 # Initialize global DB synchronously (idempotent, fast after first run)
 _init_db "$GLOBAL_DB"
+
+# ── Memory file helpers ──────────────────────────────────────────────────────
+
+# Write or update a single entry in a memory file.
+# Args: scope category content hit_count created_at
+# Routing: tool_insight → tools/{name}.md; mistake → general.md; else → domain/{cat}.md
+_write_memory_entry() {
+    local scope="$1" category="$2" content="$3" hit_count="$4" created_at="$5"
+    local root target_file
+
+    if [[ "$scope" == "global" ]]; then
+        root="${HOME}/.copilot/kaizen"
+    else
+        root=".kaizen"
+    fi
+
+    local tool_name=""
+    case "$category" in
+        tool_insight)
+            tool_name="$(printf '%s' "$content" | awk '{print $2}')"
+            [[ -z "$tool_name" ]] && tool_name="unknown"
+            target_file="${root}/tools/${tool_name}.md"
+            ;;
+        mistake)
+            target_file="${root}/general.md"
+            ;;
+        *)
+            local topic
+            topic="$(printf '%s' "$category" | tr -c 'A-Za-z0-9_-' '_')"
+            [[ -z "$topic" ]] && topic="misc"
+            target_file="${root}/domain/${topic}.md"
+            ;;
+    esac
+
+    mkdir -p "$(dirname "$target_file")" 2>/dev/null || return 1
+
+    local date_str="${created_at:0:10}"
+    [[ -z "$date_str" || "$date_str" == "null" ]] && date_str="$(date +%Y-%m-%d)"
+    local entry_line="- [${date_str}] ${content}  (seen ${hit_count}x)"
+
+    if [[ -f "$target_file" ]]; then
+        # Check if content already exists — update hit count in-place
+        if grep -qF "$content" "$target_file" 2>/dev/null; then
+            local tmpf
+            tmpf="$(mktemp)"
+            while IFS= read -r fline || [[ -n "$fline" ]]; do
+                if [[ "$fline" == *"$content"* ]]; then
+                    printf '%s\n' "$entry_line"
+                else
+                    printf '%s\n' "$fline"
+                fi
+            done < "$target_file" > "$tmpf"
+            mv "$tmpf" "$target_file"
+            return 0
+        fi
+    else
+        # New file — write header
+        local header
+        case "$category" in
+            tool_insight) header="${tool_name:-Tools}" ;;
+            mistake)      header="General" ;;
+            *)            header="$category" ;;
+        esac
+        printf '# %s\n' "$header" > "$target_file"
+    fi
+
+    printf '%s\n' "$entry_line" >> "$target_file"
+    return 0
+}
+
+# Rebuild kaizen.md index from actual files present under a root directory.
+# Args: root_directory
+_rebuild_index() {
+    local root="$1"
+    [[ -d "$root" ]] || return 0
+    local index_file="${root}/kaizen.md"
+    local today
+    today="$(date +%Y-%m-%d)"
+
+    local output=""
+    local file_count=0
+
+    # general.md
+    if [[ -f "${root}/general.md" ]]; then
+        local c
+        c="$(grep -c '^- \[' "${root}/general.md" 2>/dev/null)" || c=0
+        if [[ "$c" -gt 0 ]]; then
+            output+="- general.md — cross-project conventions and recorded mistakes (${c} entries)"$'\n'
+            file_count=$((file_count + 1))
+        fi
+    fi
+
+    # tools/*.md
+    if [[ -d "${root}/tools" ]]; then
+        for f in "${root}/tools/"*.md; do
+            [[ -f "$f" ]] || continue
+            local base
+            base="$(basename "$f")"
+            local c
+            c="$(grep -c '^- \[' "$f" 2>/dev/null)" || c=0
+            if [[ "$c" -gt 0 ]]; then
+                output+="- tools/${base} — ${base%.md} tool insights (${c} entries)"$'\n'
+                file_count=$((file_count + 1))
+            fi
+        done
+    fi
+
+    # domain/*.md
+    if [[ -d "${root}/domain" ]]; then
+        for f in "${root}/domain/"*.md; do
+            [[ -f "$f" ]] || continue
+            local base
+            base="$(basename "$f")"
+            local c
+            c="$(grep -c '^- \[' "$f" 2>/dev/null)" || c=0
+            if [[ "$c" -gt 0 ]]; then
+                output+="- domain/${base} — ${base%.md} knowledge (${c} entries)"$'\n'
+                file_count=$((file_count + 1))
+            fi
+        done
+    fi
+
+    if [[ "$file_count" -gt 0 ]]; then
+        {
+            printf '# Kaizen Memory Index\n'
+            printf '<!-- Updated: %s -->\n\n' "$today"
+            printf '%s' "$output"
+        } > "$index_file"
+    fi
+}
 
 # ── Handlers ──────────────────────────────────────────────────────────────────
 
@@ -189,94 +325,175 @@ _handle_session_start() {
     printf '%s' "$session_id" > "$KAIZEN_SESSION_FILE"
 
     if [[ "$source" != "resume" ]]; then
-        # Synchronous: insert session row immediately so early counter updates land
+        # Synchronous: insert session row
         sqlite3 "$GLOBAL_DB" "
 PRAGMA busy_timeout=5000;
 INSERT OR IGNORE INTO kaizen_sessions (session_id, repo, source, started_at)
 VALUES ('${sid_esc}', '${repo_esc}', '${source_esc}', datetime('now'));
 " 2>/dev/null || true
 
-        # Background: auto-crystallize high-signal entries (not time-critical)
-        (
-            sqlite3 "$GLOBAL_DB" "
+        # ── One-time migration: export kaizen_procedures to memory files ──
+        local migration_rows
+        migration_rows="$(sqlite3 "$GLOBAL_DB" "
 PRAGMA busy_timeout=5000;
-INSERT INTO kaizen_procedures (entry_id, category, content, scope)
-SELECT id, category, content, scope FROM kaizen_entries
-WHERE hit_count >= 10 AND crystallized = 0;
+SELECT id || char(9) || category || char(9) || scope || char(9) || COALESCE(crystallized_at, datetime('now')) || char(9) || content
+FROM kaizen_procedures WHERE exported = 0;
+" 2>/dev/null || true)"
 
-UPDATE kaizen_entries SET crystallized = 1
+        if [[ -n "$migration_rows" ]]; then
+            local mig_ids=""
+            while IFS=$'\t' read -r mid mcat mscope mdate mcontent; do
+                [[ -z "$mid" ]] && continue
+                _write_memory_entry "$mscope" "$mcat" "$mcontent" "10" "$mdate"
+                mig_ids="${mig_ids}${mid},"
+            done <<< "$migration_rows"
+            mig_ids="${mig_ids%,}"
+            if [[ -n "$mig_ids" ]]; then
+                sqlite3 "$GLOBAL_DB" "
+PRAGMA busy_timeout=5000;
+UPDATE kaizen_procedures SET exported = 1 WHERE id IN (${mig_ids});
+" 2>/dev/null || true
+            fi
+        fi
+
+        # ── Backfill applied_count from kaizen_procedures to kaizen_entries ──
+        sqlite3 "$GLOBAL_DB" "
+PRAGMA busy_timeout=5000;
+UPDATE kaizen_entries SET
+    applied_count = (SELECT kp.applied_count FROM kaizen_procedures kp WHERE kp.entry_id = kaizen_entries.id AND kp.applied_count > 0 LIMIT 1),
+    last_applied_at = (SELECT kp.last_applied_at FROM kaizen_procedures kp WHERE kp.entry_id = kaizen_entries.id AND kp.applied_count > 0 LIMIT 1)
+WHERE id IN (SELECT entry_id FROM kaizen_procedures WHERE applied_count > 0)
+  AND COALESCE(applied_count, 0) = 0;
+" 2>/dev/null || true
+
+        # ── Crystallize eligible entries to memory files ──
+        local cryst_rows
+        cryst_rows="$(sqlite3 "$GLOBAL_DB" "
+PRAGMA busy_timeout=5000;
+SELECT id || char(9) || category || char(9) || scope || char(9) || hit_count || char(9) || created_at || char(9) || content
+FROM kaizen_entries
 WHERE hit_count >= 10 AND crystallized = 0;
-" 2>/dev/null
-        ) &
-        disown $!
+" 2>/dev/null || true)"
+
+        if [[ -n "$cryst_rows" ]]; then
+            local cryst_ids=""
+            while IFS=$'\t' read -r cid ccat cscope chit ccreated ccontent; do
+                [[ -z "$cid" ]] && continue
+                _write_memory_entry "$cscope" "$ccat" "$ccontent" "$chit" "$ccreated"
+                cryst_ids="${cryst_ids}${cid},"
+            done <<< "$cryst_rows"
+            cryst_ids="${cryst_ids%,}"
+            if [[ -n "$cryst_ids" ]]; then
+                sqlite3 "$GLOBAL_DB" "
+PRAGMA busy_timeout=5000;
+UPDATE kaizen_entries SET crystallized = 1, crystallized_at = datetime('now')
+WHERE id IN (${cryst_ids});
+" 2>/dev/null || true
+            fi
+            _rebuild_index "${HOME}/.copilot/kaizen"
+            _rebuild_index ".kaizen"
+        fi
     fi
 
-    # Synchronous read of top observations for agent context
-    local entries local_entries all_entries obs_count
+    # ── Build merged memory index ──
+    local global_idx="${HOME}/.copilot/kaizen/kaizen.md"
+    local local_idx=".kaizen/kaizen.md"
+    local has_memory=0
+    local merged_output="" file_count=0
 
-    entries="$(sqlite3 "$GLOBAL_DB" "
+    # Read local index first (takes precedence for same paths)
+    local local_paths=""
+    if [[ -f "$local_idx" ]]; then
+        while IFS= read -r line; do
+            [[ "$line" == "- "* ]] || continue
+            local path="${line#- }"
+            path="${path%% —*}"
+            local_paths+="${path}"$'\n'
+            merged_output+="  • [local] ${line#- }"$'\n'
+            file_count=$((file_count + 1))
+            has_memory=1
+        done < "$local_idx"
+    fi
+
+    # Read global index, skip paths already in local
+    if [[ -f "$global_idx" ]]; then
+        while IFS= read -r line; do
+            [[ "$line" == "- "* ]] || continue
+            local path="${line#- }"
+            path="${path%% —*}"
+            if [[ -n "$local_paths" ]] && printf '%s' "$local_paths" | grep -qF "$path"; then
+                continue
+            fi
+            merged_output+="  • ${line#- }"$'\n'
+            file_count=$((file_count + 1))
+            has_memory=1
+        done < "$global_idx"
+    fi
+
+    # ── Query numbered crystallized entries from kaizen_entries ──
+    local cryst_entries
+    cryst_entries="$(sqlite3 "$GLOBAL_DB" "
+PRAGMA busy_timeout=5000;
+SELECT id || '|' || category || ': ' || content FROM kaizen_entries
+WHERE crystallized = 1
+ORDER BY COALESCE(last_applied_at, crystallized_at, last_seen) DESC LIMIT 5;
+" 2>/dev/null || true)"
+
+    local proc_count=0
+    if [[ -n "$cryst_entries" ]]; then
+        proc_count="$(printf '%s\n' "$cryst_entries" | grep -c .)" || proc_count=0
+    fi
+
+    # ── Print output ──
+    if [[ "$has_memory" -eq 1 ]]; then
+        printf '⚡ Kaizen — %d memory files | %d crystallized entries\n' "$file_count" "$proc_count"
+        printf '📚 Memory index (global + local):\n'
+        printf '%s' "$merged_output"
+    else
+        # Fallback: show top-5 raw observations (current behavior)
+        local entries local_entries all_entries obs_count
+        entries="$(sqlite3 "$GLOBAL_DB" "
 SELECT category || ': ' || content FROM kaizen_entries
 ORDER BY hit_count DESC, last_seen DESC LIMIT 5;
 " 2>/dev/null || true)"
 
-    local_entries=""
-    if [[ -f ".kaizen/kaizen.db" ]]; then
-        local_entries="$(sqlite3 ".kaizen/kaizen.db" "
+        local_entries=""
+        if [[ -f ".kaizen/kaizen.db" ]]; then
+            local_entries="$(sqlite3 ".kaizen/kaizen.db" "
 SELECT category || ': ' || content FROM kaizen_entries
 ORDER BY hit_count DESC, last_seen DESC LIMIT 5;
 " 2>/dev/null || true)"
-    fi
+        fi
 
-    all_entries="${entries}"
-    [[ -n "$local_entries" ]] && all_entries="${all_entries}
+        all_entries="${entries}"
+        [[ -n "$local_entries" ]] && all_entries="${all_entries}
 ${local_entries}"
 
-    obs_count=0
-    if [[ -n "$all_entries" ]]; then
-        obs_count="$(printf '%s\n' "$all_entries" | grep -c .)" || obs_count=0
+        obs_count=0
+        if [[ -n "$all_entries" ]]; then
+            obs_count="$(printf '%s\n' "$all_entries" | grep -c .)" || obs_count=0
+        fi
+
+        printf '⚡ Kaizen — %d crystallized entries, %d observations\n' "$proc_count" "$obs_count"
+        if [[ -n "$all_entries" ]]; then
+            while IFS= read -r line; do
+                [[ -n "$line" ]] && printf '  • %s\n' "$line"
+            done <<< "$all_entries"
+        fi
     fi
 
-    # Phase 2: query crystallized procedures (hybrid: 3 unvalidated + 2 proven)
-    local procs_unvalidated procs_proven all_procs proc_count
-    procs_unvalidated="$(sqlite3 "$GLOBAL_DB" "
-SELECT id || '|' || category || ': ' || content FROM kaizen_procedures
-WHERE applied_count = 0
-ORDER BY crystallized_at DESC LIMIT 3;
-" 2>/dev/null || true)"
-
-    procs_proven="$(sqlite3 "$GLOBAL_DB" "
-SELECT id || '|' || category || ': ' || content FROM kaizen_procedures
-WHERE applied_count > 0
-ORDER BY last_applied_at DESC LIMIT 2;
-" 2>/dev/null || true)"
-
-    all_procs="${procs_unvalidated}"
-    [[ -n "$procs_proven" ]] && { [[ -n "$all_procs" ]] && all_procs="${all_procs}
-${procs_proven}" || all_procs="${procs_proven}"; }
-
-    proc_count=0
-    if [[ -n "$all_procs" ]]; then
-        proc_count="$(printf '%s\n' "$all_procs" | grep -c .)" || proc_count=0
-    fi
-
-    # Print combined summary
-    printf '⚡ Kaizen — %d procedures, %d observations\n' "$proc_count" "$obs_count"
-    if [[ -n "$all_procs" ]]; then
+    # Always print numbered crystallized entries
+    if [[ -n "$cryst_entries" ]]; then
         while IFS= read -r line; do
             if [[ -n "$line" ]]; then
                 local p_id="${line%%|*}"
                 local p_text="${line#*|}"
                 printf '  📋 [%s] %s\n' "$p_id" "$p_text"
             fi
-        done <<< "$all_procs"
-    fi
-    if [[ -n "$all_entries" ]]; then
-        while IFS= read -r line; do
-            [[ -n "$line" ]] && printf '  • %s\n' "$line"
-        done <<< "$all_entries"
+        done <<< "$cryst_entries"
     fi
     if [[ "$proc_count" -gt 0 ]]; then
-        printf 'Mark a procedure as applied: kaizen-mark --applied <id>\n'
+        printf 'Mark an entry as applied: kaizen-mark --applied <id>\n'
     fi
 }
 
@@ -304,6 +521,37 @@ _handle_pre_tool_use() {
 
     tool_name="$(_json_get "$INPUT" ".toolName")"
 
+    # ── Inject per-tool memory file (once per session per tool) ──
+    if [[ -n "$tool_name" ]]; then
+        local already_injected=0
+        if [[ -f "$KAIZEN_INJECTED_FILE" ]] && grep -qxF "$tool_name" "$KAIZEN_INJECTED_FILE" 2>/dev/null; then
+            already_injected=1
+        fi
+
+        if [[ "$already_injected" -eq 0 ]]; then
+            local global_tool_file="${HOME}/.copilot/kaizen/tools/${tool_name}.md"
+            local local_tool_file=".kaizen/tools/${tool_name}.md"
+            local printed=0
+
+            if [[ -f "$global_tool_file" ]] || [[ -f "$local_tool_file" ]]; then
+                printf '📋 Kaizen memory for tool '\''%s'\'':\n' "$tool_name"
+                # Print entries (lines starting with "- ["), cap at 50 lines
+                if [[ -f "$global_tool_file" ]]; then
+                    grep '^- \[' "$global_tool_file" 2>/dev/null | head -50 || true
+                fi
+                if [[ -f "$local_tool_file" ]]; then
+                    grep '^- \[' "$local_tool_file" 2>/dev/null | head -50 || true
+                fi
+                printed=1
+            fi
+
+            if [[ "$printed" -eq 1 ]]; then
+                printf '%s\n' "$tool_name" >> "$KAIZEN_INJECTED_FILE"
+            fi
+        fi
+    fi
+
+    # ── Log tool use (unchanged) ──
     local sid_esc tn_esc
     sid_esc="$(_sql_escape "$session_id")"
     tn_esc="$(_sql_escape "$tool_name")"
@@ -393,7 +641,7 @@ WHERE session_id = '${sid_esc}' AND result = 'failure';" 2>/dev/null || echo "0"
     local do_decay=1
     [[ "$reason" == "abort" || "$reason" == "timeout" ]] && do_decay=0
 
-    # Background: update session, record tool-failure patterns
+    # Background: update session, record tool-failure patterns, crystallize, decay
     (
         sqlite3 "$GLOBAL_DB" "
 PRAGMA busy_timeout=5000;
@@ -415,6 +663,35 @@ WHERE session_id = '${sid_esc}' AND result = 'failure'
 GROUP BY tool_name
 HAVING COUNT(*) > 2;" 2>/dev/null
 
+        # ── Crystallize entries that crossed threshold this session ──
+        local end_cryst_rows
+        end_cryst_rows="$(sqlite3 "$GLOBAL_DB" "
+PRAGMA busy_timeout=5000;
+SELECT id || char(9) || category || char(9) || scope || char(9) || hit_count || char(9) || created_at || char(9) || content
+FROM kaizen_entries
+WHERE hit_count >= 10 AND crystallized = 0;
+" 2>/dev/null || true)"
+
+        if [[ -n "$end_cryst_rows" ]]; then
+            local end_cryst_ids=""
+            while IFS=$'\t' read -r cid ccat cscope chit ccreated ccontent; do
+                [[ -z "$cid" ]] && continue
+                _write_memory_entry "$cscope" "$ccat" "$ccontent" "$chit" "$ccreated"
+                end_cryst_ids="${end_cryst_ids}${cid},"
+            done <<< "$end_cryst_rows"
+            end_cryst_ids="${end_cryst_ids%,}"
+            if [[ -n "$end_cryst_ids" ]]; then
+                sqlite3 "$GLOBAL_DB" "
+PRAGMA busy_timeout=5000;
+UPDATE kaizen_entries SET crystallized = 1, crystallized_at = datetime('now')
+WHERE id IN (${end_cryst_ids});
+" 2>/dev/null || true
+            fi
+            _rebuild_index "${HOME}/.copilot/kaizen"
+            _rebuild_index ".kaizen"
+        fi
+
+        # ── Decay/compact ──
         if [[ "${do_decay}" == "1" ]]; then
             sqlite3 "$GLOBAL_DB" "
 PRAGMA busy_timeout=5000;
@@ -424,9 +701,10 @@ WHERE ts < datetime('now', '-7 days');
 DELETE FROM kaizen_entries
 WHERE last_seen  < datetime('now', '-60 days')
   AND hit_count  < 3
-  AND crystallized = 0;
+  AND crystallized = 0
+  AND COALESCE(applied_count, 0) = 0;
 
--- Phase 2: procedure decay
+-- Legacy procedure decay (table retained for backward compat)
 DELETE FROM kaizen_procedures
 WHERE applied_count = 0
   AND crystallized_at < datetime('now', '-90 days');
@@ -444,7 +722,124 @@ WHERE applied_count > 0
     printf '⚡ Kaizen — tools: %s, failures: %s%s\n' \
         "${tool_count:-0}" "${failure_count:-0}" "$skip_note"
 
-    rm -f "$KAIZEN_SESSION_FILE" 2>/dev/null || true
+    rm -f "$KAIZEN_SESSION_FILE" "$KAIZEN_INJECTED_FILE" 2>/dev/null || true
+}
+
+# ── Reorganize handler ────────────────────────────────────────────────────
+
+_handle_reorganize() {
+    local global_root="${HOME}/.copilot/kaizen"
+    local local_root=".kaizen"
+
+    # Use python for robust dedup/merge if available
+    local py_cmd=""
+    command -v python3 &>/dev/null && py_cmd="python3"
+    command -v python  &>/dev/null && [[ -z "$py_cmd" ]] && py_cmd="python"
+
+    if [[ -n "$py_cmd" ]]; then
+        "$py_cmd" - "$global_root" "$local_root" <<'PYEOF'
+import sys, os, re
+from collections import OrderedDict
+
+global_root = sys.argv[1]
+local_root = sys.argv[2]
+
+def parse_entries(filepath):
+    entries = []
+    if not os.path.isfile(filepath):
+        return entries
+    with open(filepath, 'r', encoding='utf-8') as f:
+        for line in f:
+            line = line.rstrip('\n')
+            m = re.match(r'^- \[(\d{4}-\d{2}-\d{2})\] (.+?)  \(seen (\d+)x\)$', line)
+            if m:
+                entries.append({
+                    'date': m.group(1),
+                    'content': m.group(2),
+                    'hit_count': int(m.group(3)),
+                })
+    return entries
+
+def write_file(filepath, header, entries):
+    os.makedirs(os.path.dirname(filepath), exist_ok=True)
+    with open(filepath, 'w', encoding='utf-8') as f:
+        f.write('# {}\n'.format(header))
+        for e in sorted(entries, key=lambda x: x['date'], reverse=True):
+            f.write('- [{}] {}  (seen {}x)\n'.format(e['date'], e['content'], e['hit_count']))
+
+summary = []
+
+for root in [global_root, local_root]:
+    if not os.path.isdir(root):
+        continue
+    for dirpath, dirs, files in os.walk(root):
+        for fname in sorted(files):
+            if fname == 'kaizen.md' or not fname.endswith('.md'):
+                continue
+            fpath = os.path.join(dirpath, fname)
+            entries = parse_entries(fpath)
+            if not entries:
+                continue
+            # Dedup by content — keep highest hit_count
+            seen = OrderedDict()
+            dups = 0
+            for e in entries:
+                key = e['content']
+                if key in seen:
+                    dups += 1
+                    if e['hit_count'] > seen[key]['hit_count']:
+                        seen[key] = e
+                else:
+                    seen[key] = e
+            deduped = list(seen.values())
+            rel = os.path.relpath(fpath, root)
+            header = os.path.splitext(os.path.basename(fpath))[0]
+            if header == 'general':
+                header = 'General'
+            if dups > 0:
+                write_file(fpath, header, deduped)
+            msg = '  * {}: {} entries'.format(rel, len(deduped))
+            if dups > 0:
+                msg += ' (removed {} duplicates)'.format(dups)
+            summary.append(msg)
+
+# Rebuild indexes
+for root in [global_root, local_root]:
+    if not os.path.isdir(root):
+        continue
+    index_path = os.path.join(root, 'kaizen.md')
+    lines = []
+    for dirpath, dirs, files in os.walk(root):
+        for fname in sorted(files):
+            if fname == 'kaizen.md' or not fname.endswith('.md'):
+                continue
+            fpath = os.path.join(dirpath, fname)
+            count = len(parse_entries(fpath))
+            if count == 0:
+                continue
+            rel = os.path.relpath(fpath, root)
+            header = os.path.splitext(os.path.basename(fpath))[0]
+            lines.append('- {} — {} ({} entries)'.format(rel, header, count))
+    if lines:
+        from datetime import date
+        with open(index_path, 'w', encoding='utf-8') as f:
+            f.write('# Kaizen Memory Index\n')
+            f.write('<!-- Updated: {} -->\n\n'.format(date.today().isoformat()))
+            for l in lines:
+                f.write(l + '\n')
+        label = 'global' if root == global_root else 'local'
+        summary.append('  * kaizen.md: index updated ({} files) [{}]'.format(len(lines), label))
+
+print('⚡ Kaizen reorganize complete')
+for s in summary:
+    print(s)
+PYEOF
+    else
+        # Fallback: rebuild indexes only (no dedup without python)
+        _rebuild_index "$global_root"
+        _rebuild_index "$local_root"
+        printf '⚡ Kaizen reorganize complete (index rebuilt, install python3 for full dedup)\n'
+    fi
 }
 
 # ── Dispatch ──────────────────────────────────────────────────────────────────
@@ -456,6 +851,7 @@ case "$EVENT" in
     postToolUse)          _handle_post_tool_use ;;
     errorOccurred)        _handle_error_occurred ;;
     sessionEnd)           _handle_session_end ;;
+    reorganize)           _handle_reorganize ;;
     *) ;;
 esac
 

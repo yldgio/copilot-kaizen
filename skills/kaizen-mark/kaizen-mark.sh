@@ -31,13 +31,13 @@ done
 
 changed="$(sqlite3 "$GLOBAL_DB" "
 PRAGMA busy_timeout=5000;
-UPDATE kaizen_procedures
-SET applied_count   = applied_count + 1,
+UPDATE kaizen_entries
+SET applied_count   = COALESCE(applied_count, 0) + 1,
     last_applied_at = datetime('now')
-WHERE id = ${ID};
+WHERE id = ${ID} AND crystallized = 1;
 SELECT changes();
 " 2>/dev/null || echo "0")"
 
 [[ "${changed}" -gt 0 ]] || exit 0
 
-printf '✅ Marked procedure #%s as applied\n' "$ID"
+printf '✅ Marked entry #%s as applied\n' "$ID"

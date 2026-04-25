@@ -1,76 +1,36 @@
-# crystallize.ps1 — Export kaizen_procedures to .kaizen/procedures/<category>.md
+# crystallize.ps1 — Reorganize Kaizen memory files and print merged index
 $ErrorActionPreference = 'SilentlyContinue'
 
-$GLOBAL_DB = Join-Path $HOME '.copilot' 'kaizen.db'
+# Find the hooks directory (relative to this script)
+$scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+$hooksScript = Join-Path $scriptDir '..\..\hooks\kaizen\kaizen.ps1'
 
-# Bail silently if sqlite3 or DB missing
-if (-not (Get-Command sqlite3 -ErrorAction SilentlyContinue)) { exit 0 }
-if (-not (Test-Path $GLOBAL_DB)) { exit 0 }
-
-# Query unexported procedures: "id|category|content"
-$rows = @()
-try {
-    $rows = & sqlite3 $GLOBAL_DB @'
-PRAGMA busy_timeout=5000;
-SELECT id || '|' || category || '|' || content FROM kaizen_procedures
-WHERE exported = 0
-ORDER BY category, crystallized_at;
-'@ 2>$null
-} catch {}
-
-$rows = @($rows) | Where-Object { $_ }
-if ($rows.Count -eq 0) { exit 0 }
-
-# Group by category; track IDs per category for safe per-file export marking
-$groups   = @{}
-$groupIds = @{}
-$today = (Get-Date).ToString('yyyy-MM-dd')
-
-foreach ($row in $rows) {
-    $parts = $row -split '\|', 3
-    $id      = $parts[0]
-    $cat     = $parts[1]
-    $content = $parts[2]
-    if (-not $groups.ContainsKey($cat))   { $groups[$cat]   = @() }
-    if (-not $groupIds.ContainsKey($cat)) { $groupIds[$cat] = @() }
-    $groups[$cat]   += $content
-    $groupIds[$cat] += $id
+# Run reorganize on global + local memory
+if (Test-Path $hooksScript) {
+    & pwsh $hooksScript reorganize
+} else {
+    Write-Output "$([char]0x26A0) Could not find kaizen.ps1 for reorganize"
 }
 
-# Write files
-$outDir = Join-Path '.' '.kaizen' 'procedures'
-if (-not (Test-Path $outDir)) { New-Item -ItemType Directory -Path $outDir -Force | Out-Null }
+# Print merged index
+$globalIdx = Join-Path $HOME '.copilot' 'kaizen' 'kaizen.md'
+$localIdx  = Join-Path '.' '.kaizen' 'kaizen.md'
 
-$exportedCount = 0
-$successIds    = @()
-
-foreach ($cat in $groups.Keys) {
-    $safeCat = $cat -replace '[^A-Za-z0-9_\-]', '_'
-    if (-not $safeCat) { continue }
-    $catFile = Join-Path $outDir "$safeCat.md"
-    $lines = @()
-    $lines += "# Kaizen Procedures — $cat"
-    $lines += ''
-    $lines += 'Auto-generated from observations with hit_count ≥ 10.'
-    $lines += "Last updated: $today"
-    $lines += ''
-    foreach ($c in $groups[$cat]) {
-        $lines += "- $c"
+if ((Test-Path $globalIdx) -or (Test-Path $localIdx)) {
+    Write-Output ''
+    Write-Output "$([char]0x1F4DA) Merged Kaizen Memory Index:"
+    Write-Output ''
+    if (Test-Path $globalIdx) {
+        Write-Output "$([char]0x2014) Global $([char]0x2014)"
+        Get-Content $globalIdx -Encoding UTF8 | Write-Output
+        Write-Output ''
     }
-    try {
-        $lines -join "`n" | Set-Content -Path $catFile -Encoding UTF8 -NoNewline -ErrorAction Stop
-        # Only record IDs for categories whose file was successfully written
-        $successIds += $groupIds[$cat]
-        $exportedCount++
-    } catch {}
+    if (Test-Path $localIdx) {
+        Write-Output "$([char]0x2014) Local $([char]0x2014)"
+        Get-Content $localIdx -Encoding UTF8 | Write-Output
+        Write-Output ''
+    }
+    Write-Output "$([char]0x1F4CB) Memory reorganized. Review .kaizen/ and git add .kaizen/*.md"
+} else {
+    Write-Output "$([char]0x1F4CB) No memory files found yet. Procedures crystallize automatically as observations cross hit_count >= 10."
 }
-
-# Mark only successfully-written rows as exported
-if ($successIds.Count -gt 0) {
-    $ids = $successIds -join ','
-    try {
-        & sqlite3 $GLOBAL_DB "PRAGMA busy_timeout=5000; UPDATE kaizen_procedures SET exported = 1 WHERE id IN ($ids);" 2>&1 | Out-Null
-    } catch {}
-}
-
-Write-Output "📋 Exported $($successIds.Count) procedures to .kaizen/procedures/"
