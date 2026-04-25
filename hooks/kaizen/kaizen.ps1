@@ -214,7 +214,7 @@ function Write-KaizenMemoryEntry {
         $lines = @(Get-Content $targetFile -Encoding UTF8)
         $found = $false
         for ($i = 0; $i -lt $lines.Count; $i++) {
-            if ($lines[$i] -like "*$Content*") {
+            if ($lines[$i].Contains($Content)) {
                 $lines[$i] = $entryLine
                 $found = $true
                 break

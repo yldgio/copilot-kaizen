@@ -212,7 +212,7 @@ _write_memory_entry() {
             local tmpf
             tmpf="$(mktemp)"
             while IFS= read -r fline || [[ -n "$fline" ]]; do
-                if [[ "$fline" == *"$content"* ]]; then
+                if printf '%s' "$fline" | grep -qF "$content" 2>/dev/null; then
                     printf '%s\n' "$entry_line"
                 else
                     printf '%s\n' "$fline"
