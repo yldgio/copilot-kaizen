@@ -163,16 +163,29 @@ VALUES ('local', 'pattern', 'Use Result<T> not exceptions for expected failures'
 
 ---
 
-## Phase 2 Preview — The Self-Improving Loop
+## Phase 2 — The Self-Improving Loop
 
-Phase 1 observes and remembers. Phase 2 will make the improvement process itself better.
+Phase 1 observes and remembers. Phase 2 closes the feedback loop.
 
-The `kaizen_procedures` table and `crystallized` flag are live today — no schema migrations needed when Phase 2 ships. A future `crystallize` command will:
+### Crystallized Procedures
 
-1. Query entries with `hit_count >= 10` not yet crystallized
-2. Group by `category` and distil them into structured procedures
-3. Emit `.kaizen/procedures/<category>.md` — human-readable, commitable
-4. Track `applied_count` per procedure — dropping procedures nobody uses
+When an observation hits `hit_count ≥ 10`, it is auto-promoted to `kaizen_procedures` at the next session start. Procedures are surfaced at every session start — higher priority than raw observations.
+
+### Skills
+
+| Skill | What it does |
+|-------|-------------|
+| `crystallize` | Exports all unexported procedures to `.kaizen/procedures/<category>.md` — human-readable, committable, shareable with your team |
+| `kaizen-mark --applied <id>` | Marks a procedure as applied after the agent acts on it. Increments `applied_count` and records `last_applied_at` |
+
+### Procedure Lifecycle
+
+1. **Observation** — errors, patterns, tool insights accumulate with `hit_count`
+2. **Crystallization** — at `hit_count ≥ 10`, promoted to `kaizen_procedures`
+3. **Surfacing** — shown at every session start (3 newest unvalidated + 2 most recently applied)
+4. **Application** — agent marks procedures as applied via `kaizen-mark`
+5. **Export** — `crystallize` skill writes `.kaizen/procedures/*.md` for team sharing
+6. **Decay** — unused procedures are pruned (90 days if never applied, 60 days since last application)
 
 The loop: better observations → better procedures → better sessions → better observations.
 
@@ -217,7 +230,8 @@ flowchart TD
     C -- yes --> D[Load memories only\nSkip session registration]
     C -- no --> E[INSERT kaizen_sessions\nAuto-crystallize hit_count ≥ 10\ninto kaizen_procedures]
     D & E --> F[SELECT top 5 global entries\nSELECT top 5 local entries\nif .kaizen/kaizen.db exists]
-    F --> G[Print ⚡ Kaizen summary\nWrite session_id to tmp file]
+    F --> F2[SELECT top 3 unvalidated procedures\nSELECT top 2 proven procedures]
+    F2 --> G[Print ⚡ Kaizen summary\nProcedures + observations\nWrite session_id to tmp file]
 
     G --> H([User sends a prompt])
     H --> I[/userPromptSubmitted event\nJSON: timestamp · cwd · prompt/]
@@ -245,7 +259,7 @@ flowchart TD
 
     W --> X{reason == 'abort'\nor 'timeout'?}
     X -- yes --> Y[Skip decay/compact\nFlush stats only]
-    X -- no --> Z[Compact: prune kaizen_tool_log > 7 days\nDecay: delete low-signal entries > 60 days]
+    X -- no --> Z[Compact: prune kaizen_tool_log > 7 days\nDecay: delete low-signal entries > 60 days\nDecay: prune stale procedures]
     Y & Z --> AA[Print ⚡ Kaizen summary\nRemove tmp session_id file]
     AA --> AB([Done])
 
@@ -264,8 +278,17 @@ flowchart TD
 copilot-hooks/
 ├── .github/plugin/plugin.json   ← plugin manifest
 ├── hooks.json                   ← hook config (auto-discovered by the CLI)
-└── hooks/kaizen/
-    ├── kaizen.sh                ← bash implementation (Linux / macOS / Windows+GitBash)
-    ├── kaizen.ps1               ← PowerShell implementation (Windows native / pwsh everywhere)
-    └── hooks.json               ← hook config for manual install into a target repo
+├── hooks/kaizen/
+│   ├── kaizen.sh                ← bash implementation (Linux / macOS / Windows+GitBash)
+│   ├── kaizen.ps1               ← PowerShell implementation (Windows native / pwsh everywhere)
+│   └── hooks.json               ← hook config for manual install into a target repo
+└── skills/
+    ├── crystallize/
+    │   ├── skill.json           ← skill manifest
+    │   ├── crystallize.sh       ← bash implementation
+    │   └── crystallize.ps1      ← PowerShell implementation
+    └── kaizen-mark/
+        ├── skill.json           ← skill manifest
+        ├── kaizen-mark.sh       ← bash implementation
+        └── kaizen-mark.ps1      ← PowerShell implementation
 ```

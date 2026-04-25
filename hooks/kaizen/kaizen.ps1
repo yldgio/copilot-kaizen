@@ -95,6 +95,8 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_ke_upsert ON kaizen_entries(category, cont
 function Initialize-KaizenDB {
     param([string]$db)
     try { & sqlite3 $db $SCHEMA_SQL 2>&1 | Out-Null } catch {}
+    # Phase 2: add last_applied_at (idempotent — fails silently if column exists)
+    try { & sqlite3 $db "PRAGMA busy_timeout=5000; ALTER TABLE kaizen_procedures ADD COLUMN last_applied_at TEXT;" 2>&1 | Out-Null } catch {}
 }
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -223,11 +225,43 @@ ORDER BY hit_count DESC, last_seen DESC LIMIT 5;
         }
 
         $allEntries = @($entries) + @($localEntries) | Where-Object { $_ }
-        $count = $allEntries.Count
+        $obsCount = $allEntries.Count
 
-        Write-Output "⚡ Kaizen — $count observations loaded"
+        # Phase 2: query crystallized procedures (hybrid: 3 unvalidated + 2 proven)
+        $procsUnvalidated = @()
+        try {
+            $procsUnvalidated = & sqlite3 $GLOBAL_DB @'
+SELECT id || '|' || category || ': ' || content FROM kaizen_procedures
+WHERE applied_count = 0
+ORDER BY crystallized_at DESC LIMIT 3;
+'@ 2>$null
+        } catch {}
+
+        $procsProven = @()
+        try {
+            $procsProven = & sqlite3 $GLOBAL_DB @'
+SELECT id || '|' || category || ': ' || content FROM kaizen_procedures
+WHERE applied_count > 0
+ORDER BY last_applied_at DESC LIMIT 2;
+'@ 2>$null
+        } catch {}
+
+        $allProcs = @($procsUnvalidated) + @($procsProven) | Where-Object { $_ }
+        $procCount = $allProcs.Count
+
+        # Print combined summary
+        Write-Output "⚡ Kaizen — $procCount procedures, $obsCount observations"
+        foreach ($p in $allProcs) {
+            $parts = $p -split '\|', 2
+            $pId   = $parts[0]
+            $pText = $parts[1]
+            Write-Output "  📋 [$pId] $pText"
+        }
         foreach ($e in $allEntries) {
             Write-Output "  • $e"
+        }
+        if ($procCount -gt 0) {
+            Write-Output 'Mark a procedure as applied: kaizen-mark --applied <id>'
         }
     }
 
@@ -341,6 +375,15 @@ DELETE FROM kaizen_entries
 WHERE last_seen  < datetime('now', '-60 days')
   AND hit_count  < 3
   AND crystallized = 0;
+
+-- Phase 2: procedure decay
+DELETE FROM kaizen_procedures
+WHERE applied_count = 0
+  AND crystallized_at < datetime('now', '-90 days');
+
+DELETE FROM kaizen_procedures
+WHERE applied_count > 0
+  AND last_applied_at < datetime('now', '-60 days');
 '@
         }
         Start-KaizenWrite $GLOBAL_DB $sql

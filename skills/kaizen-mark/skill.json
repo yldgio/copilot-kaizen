@@ -1,0 +1,7 @@
+{
+  "name": "kaizen-mark",
+  "description": "Mark a Kaizen procedure as applied. Use after acting on a surfaced procedure: kaizen-mark --applied <id>",
+  "type": "command",
+  "bash": "skills/kaizen-mark/kaizen-mark.sh",
+  "powershell": "skills/kaizen-mark/kaizen-mark.ps1"
+}

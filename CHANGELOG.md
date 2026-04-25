@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.1.0] — 2026-04-25
+
+### Added
+- Phase 2: Crystallized procedures surfaced at session start (3 unvalidated + 2 proven, hybrid ranking)
+- Phase 2: `crystallize` skill — exports procedures to `.kaizen/procedures/<category>.md` for team sharing
+- Phase 2: `kaizen-mark` skill — mark procedures as applied (`kaizen-mark --applied <id>`)
+- Phase 2: `last_applied_at` column on `kaizen_procedures` (idempotent migration)
+- Phase 2: Procedure decay at session end (90 days if never applied, 60 days since last application)
+
+### Changed
+- `sessionStart` output now shows both procedures (📋) and observations (•) with procedure IDs visible
+- `sessionEnd` decay block now includes procedure pruning rules
+
+---
+
 ## [1.0.0] — 2026-04-24
 
 ### Added
