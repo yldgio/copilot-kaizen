@@ -284,11 +284,11 @@ copilot-hooks/
 │   └── hooks.json               ← hook config for manual install into a target repo
 └── skills/
     ├── crystallize/
-    │   ├── skill.json           ← skill manifest
+    │   ├── SKILL.md             ← skill definition (official format)
     │   ├── crystallize.sh       ← bash implementation
     │   └── crystallize.ps1      ← PowerShell implementation
     └── kaizen-mark/
-        ├── skill.json           ← skill manifest
+        ├── SKILL.md             ← skill definition (official format)
         ├── kaizen-mark.sh       ← bash implementation
         └── kaizen-mark.ps1      ← PowerShell implementation
 ```

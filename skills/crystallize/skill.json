@@ -1,7 +1,0 @@
-{
-  "name": "crystallize",
-  "description": "Export high-signal Kaizen observations to .kaizen/procedures/*.md files for team sharing.",
-  "type": "command",
-  "bash": "skills/crystallize/crystallize.sh",
-  "powershell": "skills/crystallize/crystallize.ps1"
-}
