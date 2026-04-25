@@ -5,9 +5,18 @@ The goal of the plugin is to structure the auto-learning process for LLM agents,
 
 ## Behavioral guidelines
 
+<verified_claims>
+
+### 1. No Unverified Technical Claims
+
+- Never explain how a technology, SDK, or tool works unless you have read the actual source, official documentation, or verified output that proves it.
+- If you cannot cite the exact file, URL, or command output that supports your claim, say "I don't know" instead.
+- Speculation presented as fact is a critical failure.
+- If you need to make an assumption to proceed, state it explicitly and label it as an assumption.
+</verified_claims>
 <clear_assumptions>
 
-### 1. Think Before Coding
+### 2. Think Before Coding
 
 **Don't assume. Don't hide confusion. Surface tradeoffs.**
 
@@ -21,7 +30,7 @@ Before implementing:
 
 <simplicity_first>
 
-### 2. Simplicity First
+### 3. Simplicity First
 
 **Minimum code that solves the problem. Nothing speculative.**
 
@@ -35,7 +44,7 @@ Ask yourself: "Would a senior engineer say this is overcomplicated?" If yes, sim
 </simplicity_first>
 <surgical_changes>
 
-### 3. Surgical Changes
+### 4. Surgical Changes
 
 **Touch only what you must. Clean up only your own mess.**
 
@@ -55,7 +64,7 @@ The test: Every changed line should trace directly to the user's request.
 </surgical_changes>
 <goal_driven_execution>
 
-### 4. Goal-Driven Execution
+### 5. Goal-Driven Execution
 
 **Define success criteria. Loop until verified.**
 
