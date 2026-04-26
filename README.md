@@ -40,6 +40,41 @@ your conventions, your common mistakes, and your tool preferences.
 
 ---
 
+## Installing from GitHub Packages
+
+This package is published to GitHub Packages as `@yldgio/copilot-kaizen`.
+
+### Prerequisites
+
+Create a `.npmrc` file in your project (or in `~/.npmrc` for global installs):
+
+```
+@yldgio:registry=https://npm.pkg.github.com
+//npm.pkg.github.com/:_authToken=YOUR_GITHUB_TOKEN
+```
+
+You need a GitHub Personal Access Token with `read:packages` scope.
+
+### Install
+
+```bash
+npm install -g @yldgio/copilot-kaizen
+```
+
+Then run `kaizen install` in your project root as usual.
+
+## Releasing a New Version
+
+Releases are automated via [release-please](https://github.com/googleapis/release-please).
+
+1. Push commits to `main` using [Conventional Commits](https://www.conventionalcommits.org/) (`feat:`, `fix:`, `chore:`, etc.)
+2. release-please opens a **Release PR** automatically with updated `CHANGELOG.md` and bumped version
+3. Merge the PR when ready to release
+4. release-please creates the GitHub Release + git tag via GitHub API
+5. The publish workflow runs automatically → package published to GitHub Packages
+
+---
+
 ## Install
 
 ### Step 1: Install globally
