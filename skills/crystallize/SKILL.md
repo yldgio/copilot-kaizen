@@ -1,79 +1,61 @@
 ---
 name: crystallize
 description: >
-  Reorganize Kaizen memory files and display the merged knowledge index.
-  Use this skill whenever the user wants to share, export, document, or commit what Kaizen has learned —
-  including phrases like "export our learnings", "document what kaizen knows", "share procedures with the team",
-  "wrap up the sprint", "prep for retro", "commit kaizen to git", "what has kaizen learned?", or "reorganize memory".
+  Review, synthesize, and commit what Kaizen has learned across sessions.
+  Use this skill whenever the user wants to see what kaizen has learned, export learnings,
+  review kaizen memory, wrap up the sprint, prep for retro, commit kaizen, find out what patterns
+  have been captured, or reorganize memory.
   Also invoke proactively before PRs, releases, or sprint reviews without waiting to be asked.
 ---
 
 # Crystallize
 
-Crystallize reorganizes Kaizen's file-based memory (deduplicates entries, sorts by date, rebuilds the
-`kaizen.md` index) and prints the merged knowledge index so the team can review and commit it.
-
-Memory files live under:
-- **Global**: `~/.copilot/kaizen/` — cross-project knowledge
-- **Local**: `.kaizen/` in the project root — project-specific knowledge (committable)
-
-## Check first: is there any memory?
-
-Check if memory files exist:
-
-```bash
-ls ~/.copilot/kaizen/kaizen.md .kaizen/kaizen.md 2>/dev/null
-```
-
-If neither file exists, there is nothing to reorganize — no observations have yet crossed the `hit_count ≥ 10`
-crystallization threshold. Tell the user this clearly and explain that memory accumulates automatically as
-errors and patterns repeat across sessions.
+Crystallize surfaces Kaizen's accumulated knowledge — listing all captured entries and optionally
+forcing a synthesis pass that regenerates the `.kaizen/` markdown files from the DB.
 
 ## How to invoke
 
-Pick the script that matches the current shell:
-
-**Bash / macOS / Linux / WSL:**
-```bash
-bash skills/crystallize/crystallize.sh
+**Step 1 — List current entries:**
+```
+kaizen list
 ```
 
-**PowerShell / Windows (pwsh or powershell.exe):**
-```powershell
-pwsh skills/crystallize/crystallize.ps1
+This shows all entries scoped to the current project with their ID, category, hit count, and
+crystallization status (★ = promoted to long-term memory).
+
+**Step 2 (optional) — Force synthesis + rebuild `.kaizen/` markdown files:**
+```
+kaizen sync
 ```
 
-The script is idempotent — safe to run multiple times. It deduplicates entries and rebuilds the index.
+`kaizen sync` reads the top entries from the DB, updates the auto-blocks inside `.kaizen/*.md`,
+and rebuilds `.kaizen/kaizen.md`. Run this when the markdown files feel stale or before committing.
 
-## What to expect
+## What to expect from `kaizen list`
 
 ```
-⚡ Kaizen reorganize complete
-  • general.md: 5 entries (removed 2 duplicates)
-  • tools/bash.md: 3 entries
-  • kaizen.md: index updated (2 files)
-
-📚 Merged Kaizen Memory Index:
-
-— Global —
-# Kaizen Memory Index
-- general.md — cross-project conventions and recorded mistakes (5 entries)
-- tools/bash.md — bash tool insights (3 entries)
-
-— Local —
-# Kaizen Memory Index
-- domain/copilot-kaizen.md — copilot-kaizen knowledge (2 entries)
-
-📋 Memory reorganized. Review .kaizen/ and git add .kaizen/*.md
+ID    Cat          Hits  Cryst  Content
+--------------------------------------------------------------------------------
+42    mistake      7      ★     Always pass --no-pager to git log
+15    pattern      4            Use path.normalize() on Windows paths
+ 8    convention   2            Prefer kebab-case for skill folder names
 ```
 
-## After reorganizing
+- **★ (crystallized)**: entry has crossed the hit threshold and is promoted to long-term memory
+- **Hits**: how many times the hook has seen this pattern recur
+- **ID**: integer used with `kaizen mark` to record that you acted on the entry
 
-1. Show the user the merged index
-2. Suggest reviewing and editing the `.kaizen/*.md` files — any entry can be removed if it no longer applies
-3. Commit to git: `git add .kaizen/ && git commit -m "chore: update kaizen memory files"`
+## After listing / syncing
 
-## Deprecated: .kaizen/procedures/
+1. Show the user the `kaizen list` output
+2. If `.kaizen/` files were updated by `kaizen sync`, suggest reviewing them:
+   ```
+   kaizen sync
+   # then review .kaizen/kaizen.md
+   ```
+3. Commit any updated files to git:
+   ```
+   git add .kaizen/ && git commit -m "chore: update kaizen memory files"
+   ```
 
-The old `.kaizen/procedures/` output path is no longer used. Existing files there are NOT deleted
-automatically — developers may keep them for reference or remove them manually.
+Any entry can be removed or edited directly in the `.kaizen/*.md` files if it no longer applies.
