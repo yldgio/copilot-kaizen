@@ -4,6 +4,7 @@
 //
 // Commands:
 //   kaizen install [dir]  — Set up kaizen in a project directory
+//   kaizen update [dir]   — Force-update kaizen files (hooks, extension, skills)
 //   kaizen hook <event>   — Dispatch a hook event (reads stdin JSON)
 //   kaizen add <category> <content>  — Manually add a kaizen entry
 //   kaizen list [category]           — List kaizen entries
@@ -26,6 +27,10 @@ async function main() {
   switch (command) {
     case 'install':
       await runInstall(args)
+      break
+
+    case 'update':
+      await runUpdate(args)
       break
 
     case 'hook':
@@ -73,6 +78,16 @@ async function runInstall(args) {
   const { install } = await import('./install.mjs')
   const dir = args[0] || process.cwd()
   await install(path.resolve(dir))
+}
+
+// ---------------------------------------------------------------------------
+// Command: update [dir]
+// ---------------------------------------------------------------------------
+
+async function runUpdate(args) {
+  const { update } = await import('./install.mjs')
+  const dir = args[0] || process.cwd()
+  await update(path.resolve(dir))
 }
 
 // ---------------------------------------------------------------------------
@@ -308,6 +323,7 @@ copilot-kaizen v2 — Continuous-improvement memory for Copilot CLI
 
 USAGE:
   kaizen install [dir]          Set up kaizen in a project directory
+  kaizen update [dir]           Force-update all kaizen files (hooks, extension, skills)
   kaizen hook <event>           Dispatch a hook event (internal — called by wrappers)
   kaizen add <category> <text>  Manually add a kaizen entry
   kaizen list [category]        List kaizen entries for this project
@@ -323,6 +339,7 @@ CATEGORIES:
 
 EXAMPLES:
   kaizen install .
+  kaizen update .
   kaizen add mistake "Forgot to handle null in auth middleware"
   kaizen add convention "Always use pino for logging"
   kaizen list mistake

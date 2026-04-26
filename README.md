@@ -78,17 +78,20 @@ This creates:
 | `.github/hooks/kaizen.json` | Hook configuration for Copilot CLI |
 | `.github/hooks/kaizen/` | Hook wrapper scripts (gitignored) |
 | `.github/extensions/kaizen/` | Copilot CLI extension (gitignored) |
+| `.agents/skills/kaizen/` | Copilot CLI skill — teaches the agent available kaizen commands |
 
-### Step 3: Commit `.kaizen/` to your repo
+### Step 3: Commit `.kaizen/` and `.agents/skills/kaizen/` to your repo
 
 ```bash
-git add .kaizen/
-git commit -m "chore: add kaizen memory directory"
+git add .kaizen/ .agents/skills/kaizen/
+git commit -m "chore: add kaizen memory directory and skill"
 ```
 
-The hook wrappers and extension are auto-gitignored — only `.kaizen/` needs to
-be committed. Team members who also install `copilot-kaizen` globally will
-automatically get your project's kaizen context.
+The hook wrappers and extension are auto-gitignored — only `.kaizen/` and
+`.agents/skills/kaizen/` need to be committed. The skill file teaches Copilot
+about available kaizen commands and is safe to commit. Team members who also
+install `copilot-kaizen` globally will automatically get your project's kaizen
+context.
 
 ---
 
@@ -97,6 +100,7 @@ automatically get your project's kaizen context.
 | Command | Description |
 |---------|-------------|
 | `kaizen install [dir]` | Set up kaizen in a project directory |
+| `kaizen update [dir]` | Force-update kaizen files (hooks, extension, skills) — safe: never overwrites user config or memory files |
 | `kaizen add <category> <text>` | Manually add a kaizen entry |
 | `kaizen list [category]` | List entries for this project |
 | `kaizen mark <id>` | Mark an entry as applied |

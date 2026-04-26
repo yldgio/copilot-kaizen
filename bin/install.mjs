@@ -1,6 +1,6 @@
 // bin/install.mjs — Installer for copilot-kaizen
 //
-// Called by: kaizen install [dir]
+// Called by: kaizen install [dir]  |  kaizen update [dir]
 //
 // Steps:
 //   1. Detect OS
@@ -12,7 +12,8 @@
 //   7. Copy extension.mjs + lib/compress.mjs to .github/extensions/kaizen/
 //   8. Open DB (runs initSchema)
 //   9. Add .gitignore entries (idempotent)
-//  10. Print summary
+//  10. Install skills to .agents/skills/kaizen/
+//  11. Print summary
 
 import fs from 'node:fs'
 import path from 'node:path'
@@ -183,7 +184,28 @@ export async function install(projectDir) {
     console.log('    • .gitignore already has kaizen entries')
   }
 
-  // ---- Step 10: Print summary ---------------------------------------------
+  // ---- Step 10: Install skills --------------------------------------------
+  console.log('  [8/9] Installing skills...')
+
+  const skillsSrcDir = path.join(PACKAGE_ROOT, 'skills', 'kaizen')
+  const skillsDestDir = path.join(projectDir, '.agents', 'skills', 'kaizen')
+
+  fs.mkdirSync(skillsDestDir, { recursive: true })
+
+  // Copy all files from skills/kaizen/ to .agents/skills/kaizen/
+  const skillFiles = fs.readdirSync(skillsSrcDir)
+  for (const file of skillFiles) {
+    const src = path.join(skillsSrcDir, file)
+    const dest = path.join(skillsDestDir, file)
+    if (!fs.existsSync(dest)) {
+      fs.copyFileSync(src, dest)
+      console.log(`    ✓ .agents/skills/kaizen/${file}`)
+    } else {
+      console.log(`    • .agents/skills/kaizen/${file} already exists, skipping`)
+    }
+  }
+
+  // ---- Step 11: Print summary ---------------------------------------------
   console.log('')
   console.log('  ✅ copilot-kaizen installed successfully!')
   console.log('')
@@ -195,12 +217,193 @@ export async function install(projectDir) {
   console.log('    .github/hooks/kaizen.json      — Hook configuration')
   console.log('    .github/hooks/kaizen/          — Hook wrapper scripts')
   console.log('    .github/extensions/kaizen/     — Copilot CLI extension')
+  console.log('    .agents/skills/kaizen/         — Copilot CLI skill')
   console.log(`    ${getDbPath()}  — SQLite database`)
   console.log('')
   console.log('  Next steps:')
   console.log('    1. Edit .kaizen/general.md with your project conventions')
   console.log('    2. Add tool-specific guidance to .kaizen/tools/<tool>.md')
-  console.log('    3. Commit .kaizen/ to your repo (hooks & extensions are gitignored)')
+  console.log('    3. Commit .kaizen/ and .agents/skills/kaizen/ to your repo')
+  console.log('       (hooks & extensions are gitignored; skills are committable)')
   console.log('    4. Start a Copilot CLI session — kaizen will auto-inject context')
+  console.log('')
+}
+
+/**
+ * Force-update copilot-kaizen files in a project directory.
+ *
+ * Same as install() but skips existsSync guards for hooks, extension, and skills —
+ * always overwrites them with the latest package versions.
+ *
+ * Never overwrites:
+ *   - .github/hooks/kaizen.json  (user config)
+ *   - .kaizen/kaizen.md          (user content)
+ *   - .kaizen/general.md         (user content)
+ *   - .gitignore                 (append-only, already idempotent)
+ *   - DB                         (initSchema is already idempotent)
+ *
+ * @param {string} projectDir — absolute path to the project root
+ */
+export async function update(projectDir) {
+  const isWindows = os.platform() === 'win32'
+
+  console.log(`\n🔄 copilot-kaizen update`)
+  console.log(`   Project: ${projectDir}`)
+  console.log(`   OS: ${os.platform()} (${os.arch()})`)
+  console.log('')
+
+  // ---- Step 2: Resolve all paths ------------------------------------------
+  const kaizenDir         = path.join(projectDir, '.kaizen')
+  const kaizenToolsDir    = path.join(kaizenDir, 'tools')
+  const kaizenDomainDir   = path.join(kaizenDir, 'domain')
+  const globalKaizenDir   = path.join(os.homedir(), '.copilot', 'kaizen')
+  const globalToolsDir    = path.join(globalKaizenDir, 'tools')
+  const githubDir         = path.join(projectDir, '.github')
+  const hooksInstallDir   = path.join(githubDir, 'hooks', 'kaizen')
+  const hooksJsonPath     = path.join(githubDir, 'hooks', 'kaizen.json')
+  const extensionDir      = path.join(githubDir, 'extensions', 'kaizen')
+  const extensionLibDir   = path.join(extensionDir, 'lib')
+
+  // ---- Step 3: Init .kaizen/ (idempotent) ---------------------------------
+  console.log('  [1/9] Initializing .kaizen/ directory...')
+
+  fs.mkdirSync(kaizenToolsDir, { recursive: true })
+  fs.mkdirSync(kaizenDomainDir, { recursive: true })
+
+  // User content — never force-overwrite
+  const kaizenMdPath = path.join(kaizenDir, 'kaizen.md')
+  if (!fs.existsSync(kaizenMdPath)) {
+    const tmpl = fs.readFileSync(path.join(PACKAGE_ROOT, 'templates', 'kaizen.md.tmpl'), 'utf8')
+    const content = tmpl
+      .replace('{DATE}', new Date().toISOString().slice(0, 10))
+      .replace('{INDEX_LINES}', '- general.md — conventions')
+    fs.writeFileSync(kaizenMdPath, content, 'utf8')
+    console.log('    ✓ Created .kaizen/kaizen.md')
+  } else {
+    console.log('    • .kaizen/kaizen.md (user content — not overwritten)')
+  }
+
+  const generalMdPath = path.join(kaizenDir, 'general.md')
+  if (!fs.existsSync(generalMdPath)) {
+    fs.copyFileSync(
+      path.join(PACKAGE_ROOT, 'templates', 'general.md.tmpl'),
+      generalMdPath
+    )
+    console.log('    ✓ Created .kaizen/general.md')
+  } else {
+    console.log('    • .kaizen/general.md (user content — not overwritten)')
+  }
+
+  // ---- Step 4: Init ~/.copilot/kaizen/ ------------------------------------
+  console.log('  [2/9] Initializing global kaizen directory...')
+
+  fs.mkdirSync(globalToolsDir, { recursive: true })
+  console.log(`    ✓ ${globalKaizenDir}`)
+
+  // ---- Step 5: Copy hook wrapper scripts (always overwrite) ---------------
+  console.log('  [3/9] Installing hook wrappers...')
+
+  fs.mkdirSync(hooksInstallDir, { recursive: true })
+
+  const kaizenShDest = path.join(hooksInstallDir, 'kaizen.sh')
+  fs.copyFileSync(path.join(PACKAGE_ROOT, 'hooks', 'kaizen.sh'), kaizenShDest)
+  if (!isWindows) {
+    try { fs.chmodSync(kaizenShDest, 0o755) } catch { /* not critical */ }
+  }
+  console.log('    ✓ .github/hooks/kaizen/kaizen.sh (updated)')
+
+  const kaizenPs1Dest = path.join(hooksInstallDir, 'kaizen.ps1')
+  fs.copyFileSync(path.join(PACKAGE_ROOT, 'hooks', 'kaizen.ps1'), kaizenPs1Dest)
+  console.log('    ✓ .github/hooks/kaizen/kaizen.ps1 (updated)')
+
+  // ---- Step 6: Write hooks.json (never overwrite user config) -------------
+  console.log('  [4/9] Writing hooks configuration...')
+
+  fs.mkdirSync(path.join(githubDir, 'hooks'), { recursive: true })
+
+  if (!fs.existsSync(hooksJsonPath)) {
+    fs.copyFileSync(path.join(PACKAGE_ROOT, 'hooks.json'), hooksJsonPath)
+    console.log('    ✓ .github/hooks/kaizen.json')
+  } else {
+    console.log('    • .github/hooks/kaizen.json (user config — not overwritten)')
+  }
+
+  // ---- Step 7: Copy extension.mjs + lib/compress.mjs (always overwrite) --
+  console.log('  [5/9] Installing Copilot CLI extension...')
+
+  fs.mkdirSync(extensionLibDir, { recursive: true })
+
+  const extensionDest = path.join(extensionDir, 'extension.mjs')
+  fs.copyFileSync(path.join(PACKAGE_ROOT, 'extension.mjs'), extensionDest)
+  console.log('    ✓ .github/extensions/kaizen/extension.mjs (updated)')
+
+  const compressDest = path.join(extensionLibDir, 'compress.mjs')
+  fs.copyFileSync(path.join(PACKAGE_ROOT, 'lib', 'compress.mjs'), compressDest)
+  console.log('    ✓ .github/extensions/kaizen/lib/compress.mjs (updated)')
+
+  // ---- Step 8: Open DB (runs initSchema) ----------------------------------
+  console.log('  [6/9] Initializing database...')
+
+  const { openDb, getDbPath } = await import('../lib/db.mjs')
+  const db = openDb()
+  db.close()
+  console.log(`    ✓ ${getDbPath()}`)
+
+  // ---- Step 9: Add .gitignore entries (idempotent) ------------------------
+  console.log('  [7/9] Updating .gitignore...')
+
+  const gitignorePath = path.join(projectDir, '.gitignore')
+  const entriesToAdd = [
+    '# copilot-kaizen',
+    '.github/hooks/kaizen/',
+    '.github/extensions/kaizen/',
+  ]
+
+  let gitignoreContent = ''
+  try {
+    gitignoreContent = fs.readFileSync(gitignorePath, 'utf8')
+  } catch {
+    // .gitignore doesn't exist
+  }
+
+  const linesToAdd = entriesToAdd.filter(line => !gitignoreContent.includes(line))
+  if (linesToAdd.length > 0) {
+    const suffix = gitignoreContent.endsWith('\n') ? '' : '\n'
+    fs.appendFileSync(gitignorePath, suffix + linesToAdd.join('\n') + '\n', 'utf8')
+    console.log('    ✓ Added kaizen entries to .gitignore')
+  } else {
+    console.log('    • .gitignore already has kaizen entries')
+  }
+
+  // ---- Step 10: Install skills (always overwrite) -------------------------
+  console.log('  [8/9] Installing skills...')
+
+  const skillsSrcDir = path.join(PACKAGE_ROOT, 'skills', 'kaizen')
+  const skillsDestDir = path.join(projectDir, '.agents', 'skills', 'kaizen')
+
+  fs.mkdirSync(skillsDestDir, { recursive: true })
+
+  const skillFilesUpdate = fs.readdirSync(skillsSrcDir)
+  for (const file of skillFilesUpdate) {
+    const src = path.join(skillsSrcDir, file)
+    const dest = path.join(skillsDestDir, file)
+    fs.copyFileSync(src, dest)
+    console.log(`    ✓ .agents/skills/kaizen/${file} (updated)`)
+  }
+
+  // ---- Summary ------------------------------------------------------------
+  console.log('')
+  console.log('  ✅ copilot-kaizen updated successfully!')
+  console.log('')
+  console.log('  Files updated:')
+  console.log('    .github/hooks/kaizen/          — Hook wrapper scripts')
+  console.log('    .github/extensions/kaizen/     — Copilot CLI extension')
+  console.log('    .agents/skills/kaizen/         — Copilot CLI skill')
+  console.log(`    ${getDbPath()}  — SQLite database`)
+  console.log('')
+  console.log('  Not overwritten (user content / config):')
+  console.log('    .github/hooks/kaizen.json      — Hook configuration')
+  console.log('    .kaizen/kaizen.md              — Memory index')
+  console.log('    .kaizen/general.md             — General conventions')
   console.log('')
 }
