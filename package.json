@@ -1,6 +1,6 @@
 {
   "name": "@yldgio/copilot-kaizen",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Continuous-improvement memory layer for GitHub Copilot CLI — auto-learning hooks, context injection, and synthesis",
   "type": "module",
   "engines": {

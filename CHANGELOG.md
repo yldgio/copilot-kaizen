@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.0.1](https://github.com/yldgio/copilot-kaizen/compare/v1.0.0...v1.0.1) (2026-04-26)
+
+
+### Bug Fixes
+
+* set executable bit on bin scripts ([39dd69b](https://github.com/yldgio/copilot-kaizen/commit/39dd69b055bf3d995c2e64091b938dbac0438509))
+
 ## 1.0.0 (2026-04-26)
 
 
