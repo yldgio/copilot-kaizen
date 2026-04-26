@@ -1,0 +1,49 @@
+{
+  "name": "copilot-kaizen",
+  "version": "2.0.0",
+  "description": "Continuous-improvement memory layer for GitHub Copilot CLI — hooks, context injection, and synthesis",
+  "type": "module",
+  "engines": {
+    "node": ">=18"
+  },
+  "bin": {
+    "kaizen": "./bin/kaizen.mjs"
+  },
+  "exports": {
+    ".": "./kaizen.mjs",
+    "./extension": "./extension.mjs",
+    "./lib/db": "./lib/db.mjs",
+    "./lib/inject": "./lib/inject.mjs",
+    "./lib/synthesize": "./lib/synthesize.mjs",
+    "./lib/compress": "./lib/compress.mjs",
+    "./lib/project": "./lib/project.mjs"
+  },
+  "files": [
+    "kaizen.mjs",
+    "extension.mjs",
+    "lib/",
+    "bin/",
+    "hooks/",
+    "templates/",
+    "hooks.json"
+  ],
+  "dependencies": {
+    "better-sqlite3": "^11.7.0"
+  },
+  "scripts": {
+    "test": "node --test test/",
+    "lint": "echo 'no linter configured'"
+  },
+  "keywords": [
+    "copilot",
+    "kaizen",
+    "hooks",
+    "memory",
+    "context"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yldgio/copilot-kaizen.git"
+  }
+}
