@@ -1,7 +1,7 @@
 {
   "name": "copilot-kaizen",
   "version": "2.0.0",
-  "description": "Continuous-improvement memory layer for GitHub Copilot CLI — hooks, context injection, and synthesis",
+  "description": "Continuous-improvement memory layer for GitHub Copilot CLI — auto-learning hooks, context injection, and synthesis",
   "type": "module",
   "engines": {
     "node": ">=18"
@@ -25,25 +25,37 @@
     "bin/",
     "hooks/",
     "templates/",
-    "hooks.json"
+    "hooks.json",
+    "README.md",
+    "LICENSE"
   ],
   "dependencies": {
     "better-sqlite3": "^11.7.0"
   },
+  "devDependencies": {},
   "scripts": {
     "test": "node --test test/",
-    "lint": "echo 'no linter configured'"
+    "lint": "echo 'no linter configured'",
+    "prepublishOnly": "node -e \"import('./lib/db.mjs').then(m => { const db = m.openDb(); db.close(); console.log('DB OK') })\""
   },
   "keywords": [
     "copilot",
+    "copilot-cli",
     "kaizen",
     "hooks",
     "memory",
-    "context"
+    "context-injection",
+    "continuous-improvement",
+    "ai-tools"
   ],
   "license": "MIT",
   "repository": {
     "type": "git",
     "url": "https://github.com/yldgio/copilot-kaizen.git"
-  }
+  },
+  "homepage": "https://github.com/yldgio/copilot-kaizen#readme",
+  "bugs": {
+    "url": "https://github.com/yldgio/copilot-kaizen/issues"
+  },
+  "author": "AGIC"
 }
