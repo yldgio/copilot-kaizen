@@ -15,8 +15,16 @@ jobs:
   release-please:
     runs-on: ubuntu-latest
     steps:
-      - uses: googleapis/release-please-action@v4
+      # release-please-action v5 (release-please core 17.6.0). Pinned to v5
+      # because @v4 saw an upstream regression. The action can still fail
+      # intermittently due to a GitHub GraphQL bug in the "Fetching merge
+      # commits" step — see https://github.com/googleapis/release-please/issues/2577
+      # (closed but unresolved as of 2025-09). continue-on-error keeps the
+      # workflow green; a transient failure just means no release PR this
+      # push — the next push will retry.
+      - uses: googleapis/release-please-action@v5
         id: release
+        continue-on-error: true
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           release-type: node

@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.0.2](https://github.com/yldgio/copilot-kaizen/compare/v1.0.1...v1.0.2) (2026-04-27)
+
+
+### Bug Fixes
+
+* **hooks:** ship `hooks.json` in the documented Copilot CLI schema (`type: command` + `bash` / `powershell` strings). The previous schema (`command` + `args` + `commandWindows` + `argsWindows`) was undocumented and silently never fired — hooks installed on existing setups did not run. ([c04fad6](https://github.com/yldgio/copilot-kaizen/commit/c04fad6))
+* **install:** auto-detect and rewrite legacy `kaizen.json` configs on `kaizen install` / `kaizen update`; original is preserved as `.bak-<timestamp>`. ([c04fad6](https://github.com/yldgio/copilot-kaizen/commit/c04fad6))
+* **wrappers:** honor `SKIP_KAIZEN=1` kill-switch in both `kaizen.sh` and `kaizen.ps1`. ([a160acb](https://github.com/yldgio/copilot-kaizen/commit/a160acb))
+* **install.sh:** strip UTF-8 BOM that caused `exec format error` on some POSIX shells. ([a160acb](https://github.com/yldgio/copilot-kaizen/commit/a160acb))
+* **ci:** bump `release-please-action` to v5 and tolerate the upstream GraphQL "Fetching merge commits" outage (see googleapis/release-please#2577).
+
+### ⚠️ Upgrade note
+
+Existing installs MUST run `kaizen update` to rewrite `.github/hooks/kaizen.json`. Without this, hooks remain silently disabled. The legacy file is backed up as `kaizen.json.bak-<timestamp>`.
+
 ## [1.0.1](https://github.com/yldgio/copilot-kaizen/compare/v1.0.0...v1.0.1) (2026-04-26)
 
 
