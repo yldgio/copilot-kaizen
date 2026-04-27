@@ -25,6 +25,7 @@
     "bin/",
     "hooks/",
     "templates/",
+    "skills/",
     "hooks.json",
     "README.md",
     "LICENSE"
