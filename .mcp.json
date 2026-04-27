@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "context7": {
+      "url": "https://mcp.context7.com/mcp"
+    },
+
+    "microsoft-docs": {
+      "url": "https://learn.microsoft.com/api/mcp"
+    }
+  }
+}
