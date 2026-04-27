@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env bash
+#!/usr/bin/env bash
 # install.sh — copilot-kaizen one-liner installer
 #
 # Usage:

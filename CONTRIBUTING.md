@@ -53,7 +53,7 @@ PowerShell equivalent:
 1. **One concern per PR.** Keep changes focused.
 2. **Test on both platforms.** If you change hook logic, verify `hooks/kaizen.sh` and `hooks/kaizen.ps1` stay in sync.
 3. **Update CHANGELOG.md.** Add an entry under `[Unreleased]`.
-4. **Keep hooks non-blocking.** All SQLite writes must remain in background processes.
+4. **Keep preToolUse fast.** It has a 2s timeout. All DB writes use synchronous `better-sqlite3` — only preToolUse uses `setImmediate` to defer its write off the critical path.
 5. **Exit 0 on failure.** Hooks must never block or crash the agent.
 
 ---

@@ -1,6 +1,5 @@
 {
-  "name": "copilot-kaizen",
-  "version": "2.0.0",
+  "version": "1",
   "description": "Continuous-improvement memory layer — auto-learning hooks for Copilot CLI",
   "hooks": {
     "sessionStart": [
@@ -18,7 +17,7 @@
         "args": [".github/hooks/kaizen/kaizen.sh", "sessionEnd"],
         "commandWindows": "pwsh",
         "argsWindows": ["-File", ".github/hooks/kaizen/kaizen.ps1", "-Event", "sessionEnd"],
-        "timeoutSec": 30
+        "timeoutSec": 15
       }
     ],
     "preToolUse": [
