@@ -14,34 +14,36 @@ Thank you for your interest in contributing! This document explains how to get s
 
 ## Development Setup
 
-Requirements: `sqlite3`, `bash` (or Git Bash on Windows), `pwsh` / PowerShell 5.1+.
+Requirements: Node.js 18+, npm, `bash` (or Git Bash on Windows), `pwsh` / PowerShell 5.1+.
 
 ```bash
 git clone https://github.com/yldgio/copilot-kaizen.git
 cd copilot-kaizen
+npm install
 ```
 
-No build step — the scripts are plain Bash and PowerShell. Install the plugin locally to test:
+Install globally from source to test the CLI:
 
 ```bash
-copilot plugin install /path/to/copilot-kaizen
+npm install -g .
+kaizen install .
 ```
 
-### Testing the hook scripts manually
+### Testing the hook dispatcher manually
 
 ```bash
 # Simulate a sessionStart event
-echo '{"source":"new","cwd":"/tmp/test"}' | bash hooks/kaizen/kaizen.sh sessionStart
+echo '{"source":"new","cwd":"'$(pwd)'"}' | node bin/kaizen.mjs hook sessionStart
 
 # Simulate an error event
-echo '{"error":{"name":"TestError","message":"something failed"},"cwd":"/tmp/test"}' \
-  | bash hooks/kaizen/kaizen.sh errorOccurred
+echo '{"error":{"name":"TestError","message":"something failed"},"cwd":"'$(pwd)'"}' \
+  | node bin/kaizen.mjs hook errorOccurred
 ```
 
 PowerShell equivalent:
 
 ```powershell
-'{"source":"new","cwd":"C:\\tmp\\test"}' | pwsh hooks/kaizen/kaizen.ps1 -Event sessionStart
+'{"source":"new","cwd":"' + $PWD + '"}' | node bin/kaizen.mjs hook sessionStart
 ```
 
 ---
@@ -49,7 +51,7 @@ PowerShell equivalent:
 ## Pull Request Guidelines
 
 1. **One concern per PR.** Keep changes focused.
-2. **Test on both scripts.** If you change logic, update both `kaizen.sh` and `kaizen.ps1`.
+2. **Test on both platforms.** If you change hook logic, verify `hooks/kaizen.sh` and `hooks/kaizen.ps1` stay in sync.
 3. **Update CHANGELOG.md.** Add an entry under `[Unreleased]`.
 4. **Keep hooks non-blocking.** All SQLite writes must remain in background processes.
 5. **Exit 0 on failure.** Hooks must never block or crash the agent.
@@ -58,8 +60,9 @@ PowerShell equivalent:
 
 ## Code Style
 
-- Bash: `set -euo pipefail`, `trap 'exit 0' ERR`, snake_case functions prefixed `_`
-- PowerShell: `$ErrorActionPreference = 'SilentlyContinue'`, PascalCase functions
+- JavaScript (`.mjs`): ESM modules, async/await, JSDoc on exported functions
+- Shell wrappers (`hooks/kaizen.sh`): POSIX sh, errors suppressed via `2>/dev/null || true`
+- PowerShell wrappers (`hooks/kaizen.ps1`): `$ErrorActionPreference` not set (try/catch used instead)
 - SQL: uppercase keywords, one clause per line
 - Comments only where intent is non-obvious
 

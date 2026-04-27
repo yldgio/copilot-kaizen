@@ -42,10 +42,6 @@ temp/
 secrets.*
 *.key
 *.pem
-docs/github-copilot-sdk.md
-docs/hooks-doc.txt
-https-www-youngleaders-tech-p-how-i-finally-sorted.md
-KAIZEN_MEMORY_PLAN.md
-IMPLEMENTATION_PLAN.md
+docs/
 node_modules/
 phase-*.md
