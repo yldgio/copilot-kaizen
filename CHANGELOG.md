@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.1.0](https://github.com/yldgio/copilot-kaizen/compare/v1.0.1...v1.1.0) (2026-04-27)
+
+
+### Features
+
+* add devcontainer setup and plugin installation scripts ([0a4fca4](https://github.com/yldgio/copilot-kaizen/commit/0a4fca4f0f9659d6b1d4f4f267ad9ebd1796c292))
+* add MCP server configuration for context7 and Microsoft Docs ([d5a9c1a](https://github.com/yldgio/copilot-kaizen/commit/d5a9c1afd5c242197164abd4e91bd6682f14e7e1))
+* add one-liner bash and PowerShell installers ([7200649](https://github.com/yldgio/copilot-kaizen/commit/7200649325459f00a8ea3587fbeec01708c1c0ed))
+
+
+### Bug Fixes
+
+* add skills/ to package.json files array ([8b734ef](https://github.com/yldgio/copilot-kaizen/commit/8b734ef0da28348fc723363d1a166a06946018bc))
+* address tenth-man audit findings ([a160acb](https://github.com/yldgio/copilot-kaizen/commit/a160acbb389c86168c6bd814141cfa52627da392))
+* **hooks:** use documented Copilot CLI hook schema; auto-rewrite legacy configs ([c04fad6](https://github.com/yldgio/copilot-kaizen/commit/c04fad6ecb6638dc83599cbbacdfdbe572ad9de5))
+
 ## [1.0.2](https://github.com/yldgio/copilot-kaizen/compare/v1.0.1...v1.0.2) (2026-04-27)
 
 
