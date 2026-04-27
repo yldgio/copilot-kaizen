@@ -40,6 +40,25 @@ your conventions, your common mistakes, and your tool preferences.
 
 ---
 
+## Quick Install
+
+**Unix / macOS:**
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/yldgio/copilot-kaizen/main/install.sh | bash
+```
+
+**Windows (PowerShell):**
+
+```powershell
+irm https://raw.githubusercontent.com/yldgio/copilot-kaizen/main/install.ps1 | iex
+```
+
+> **Prerequisites:** Node.js 18+ and npm must be installed. Run from your project root to
+> install kaizen globally and set it up in the current project automatically.
+
+---
+
 ## Installing from GitHub Packages
 
 This package is published to GitHub Packages as `@yldgio/copilot-kaizen`.
