@@ -25,6 +25,84 @@ const __dirname = path.dirname(__filename)
 const PACKAGE_ROOT = path.resolve(__dirname, '..')
 
 /**
+ * Write `.github/hooks/kaizen.json` from the package template.
+ *
+ * - If destination is missing → write it.
+ * - If destination exists but uses the legacy non-Copilot-CLI schema
+ *   (no `type: "command"` field on hook entries) → back it up to
+ *   `kaizen.json.bak-<timestamp>` and overwrite. These configs were shipped
+ *   by an earlier broken version of kaizen and DO NOT WORK with Copilot CLI.
+ * - If destination exists with the correct schema → leave it alone (user
+ *   may have customized timeouts, added hooks, etc.).
+ *
+ * @param {string} destPath  - target file path
+ * @param {string} pkgRoot   - kaizen package root
+ * @param {{force?: boolean}} opts
+ */
+function writeHooksJson(destPath, pkgRoot, opts = {}) {
+  const srcPath = path.join(pkgRoot, 'hooks.json')
+
+  if (!fs.existsSync(destPath)) {
+    fs.copyFileSync(srcPath, destPath)
+    console.log('    ✓ .github/hooks/kaizen.json')
+    return
+  }
+
+  if (opts.force) {
+    fs.copyFileSync(srcPath, destPath)
+    console.log('    ✓ .github/hooks/kaizen.json (forced overwrite)')
+    return
+  }
+
+  let isStale = false
+  let parseError = null
+  try {
+    const existing = JSON.parse(fs.readFileSync(destPath, 'utf8'))
+    isStale = isLegacyKaizenSchema(existing)
+  } catch (err) {
+    parseError = err
+    isStale = true
+  }
+
+  if (isStale) {
+    const backupPath = `${destPath}.bak-${Date.now()}`
+    fs.copyFileSync(destPath, backupPath)
+    fs.copyFileSync(srcPath, destPath)
+    const reason = parseError ? 'invalid JSON' : 'legacy schema'
+    console.log(`    ✓ .github/hooks/kaizen.json (rewrote — ${reason}; backup: ${path.basename(backupPath)})`)
+  } else {
+    console.log('    • .github/hooks/kaizen.json already exists (not overwritten)')
+  }
+}
+
+/**
+ * Detect the broken pre-1.0.2 kaizen schema that used `command`/`args` fields
+ * instead of the documented Copilot CLI `type:command` + `bash`/`powershell` shape.
+ *
+ * Returns true if ANY hook entry uses the legacy markers (`args` array or
+ * `commandWindows`). Mixed configs (some valid, some legacy) are treated as
+ * legacy so the broken entries get fixed.
+ *
+ * @param {any} json
+ * @returns {boolean} true if config contains any broken legacy entries
+ */
+function isLegacyKaizenSchema(json) {
+  if (!json || typeof json !== 'object' || !json.hooks) return false
+  for (const eventName of Object.keys(json.hooks)) {
+    const entries = json.hooks[eventName]
+    if (!Array.isArray(entries)) continue
+    for (const entry of entries) {
+      if (entry && typeof entry === 'object') {
+        if (Array.isArray(entry.args) || typeof entry.commandWindows === 'string' || typeof entry.argsWindows !== 'undefined') {
+          return true
+        }
+      }
+    }
+  }
+  return false
+}
+
+/**
  * Install copilot-kaizen into a project directory.
  *
  * @param {string} projectDir — absolute path to the project root
@@ -112,20 +190,12 @@ export async function install(projectDir) {
     console.log('    • .github/hooks/kaizen/kaizen.ps1 already exists, skipping')
   }
 
-  // ---- Step 6: Write hooks.json (only if not exists) ----------------------
+  // ---- Step 6: Write hooks.json (only if not exists or stale-format) ------
   console.log('  [4/9] Writing hooks configuration...')
 
   fs.mkdirSync(path.join(githubDir, 'hooks'), { recursive: true })
 
-  if (!fs.existsSync(hooksJsonPath)) {
-    fs.copyFileSync(
-      path.join(PACKAGE_ROOT, 'hooks.json'),
-      hooksJsonPath
-    )
-    console.log('    ✓ .github/hooks/kaizen.json')
-  } else {
-    console.log('    • .github/hooks/kaizen.json already exists (not overwritten)')
-  }
+  writeHooksJson(hooksJsonPath, PACKAGE_ROOT, { force: false })
 
   // ---- Step 7: Copy extension.mjs + lib/compress.mjs ---------------------
   console.log('  [5/9] Installing Copilot CLI extension...')
@@ -316,17 +386,12 @@ export async function update(projectDir) {
   fs.copyFileSync(path.join(PACKAGE_ROOT, 'hooks', 'kaizen.ps1'), kaizenPs1Dest)
   console.log('    ✓ .github/hooks/kaizen/kaizen.ps1 (updated)')
 
-  // ---- Step 6: Write hooks.json (never overwrite user config) -------------
+  // ---- Step 6: Write hooks.json (overwrite stale-format, preserve custom) -
   console.log('  [4/9] Writing hooks configuration...')
 
   fs.mkdirSync(path.join(githubDir, 'hooks'), { recursive: true })
 
-  if (!fs.existsSync(hooksJsonPath)) {
-    fs.copyFileSync(path.join(PACKAGE_ROOT, 'hooks.json'), hooksJsonPath)
-    console.log('    ✓ .github/hooks/kaizen.json')
-  } else {
-    console.log('    • .github/hooks/kaizen.json (user config — not overwritten)')
-  }
+  writeHooksJson(hooksJsonPath, PACKAGE_ROOT, { force: false })
 
   // ---- Step 7: Copy extension.mjs + lib/compress.mjs (always overwrite) --
   console.log('  [5/9] Installing Copilot CLI extension...')

@@ -1,49 +1,44 @@
 {
-  "version": "1",
+  "version": 1,
   "description": "Continuous-improvement memory layer — auto-learning hooks for Copilot CLI",
   "hooks": {
     "sessionStart": [
       {
-        "command": "bash",
-        "args": [".github/hooks/kaizen/kaizen.sh", "sessionStart"],
-        "commandWindows": "pwsh",
-        "argsWindows": ["-File", ".github/hooks/kaizen/kaizen.ps1", "-Event", "sessionStart"],
+        "type": "command",
+        "bash": ".github/hooks/kaizen/kaizen.sh sessionStart",
+        "powershell": "pwsh -NoProfile -File .github/hooks/kaizen/kaizen.ps1 -Event sessionStart",
         "timeoutSec": 10
       }
     ],
     "sessionEnd": [
       {
-        "command": "bash",
-        "args": [".github/hooks/kaizen/kaizen.sh", "sessionEnd"],
-        "commandWindows": "pwsh",
-        "argsWindows": ["-File", ".github/hooks/kaizen/kaizen.ps1", "-Event", "sessionEnd"],
+        "type": "command",
+        "bash": ".github/hooks/kaizen/kaizen.sh sessionEnd",
+        "powershell": "pwsh -NoProfile -File .github/hooks/kaizen/kaizen.ps1 -Event sessionEnd",
         "timeoutSec": 15
       }
     ],
     "preToolUse": [
       {
-        "command": "bash",
-        "args": [".github/hooks/kaizen/kaizen.sh", "preToolUse"],
-        "commandWindows": "pwsh",
-        "argsWindows": ["-File", ".github/hooks/kaizen/kaizen.ps1", "-Event", "preToolUse"],
+        "type": "command",
+        "bash": ".github/hooks/kaizen/kaizen.sh preToolUse",
+        "powershell": "pwsh -NoProfile -File .github/hooks/kaizen/kaizen.ps1 -Event preToolUse",
         "timeoutSec": 2
       }
     ],
     "postToolUse": [
       {
-        "command": "bash",
-        "args": [".github/hooks/kaizen/kaizen.sh", "postToolUse"],
-        "commandWindows": "pwsh",
-        "argsWindows": ["-File", ".github/hooks/kaizen/kaizen.ps1", "-Event", "postToolUse"],
+        "type": "command",
+        "bash": ".github/hooks/kaizen/kaizen.sh postToolUse",
+        "powershell": "pwsh -NoProfile -File .github/hooks/kaizen/kaizen.ps1 -Event postToolUse",
         "timeoutSec": 5
       }
     ],
     "errorOccurred": [
       {
-        "command": "bash",
-        "args": [".github/hooks/kaizen/kaizen.sh", "errorOccurred"],
-        "commandWindows": "pwsh",
-        "argsWindows": ["-File", ".github/hooks/kaizen/kaizen.ps1", "-Event", "errorOccurred"],
+        "type": "command",
+        "bash": ".github/hooks/kaizen/kaizen.sh errorOccurred",
+        "powershell": "pwsh -NoProfile -File .github/hooks/kaizen/kaizen.ps1 -Event errorOccurred",
         "timeoutSec": 5
       }
     ]
