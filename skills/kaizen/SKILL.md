@@ -1,15 +1,17 @@
 ---
 name: kaizen
 description: >
-  Use kaizen CLI to review what the project has learned, list captured entries,
-  mark entries as applied, add new entries, or sync the memory index.
-  Invoke when the user says: "what has kaizen learned?", "show kaizen entries",
-  "list patterns", "list mistakes", "mark that as applied", "mark kaizen entry N",
-  "I followed kaizen entry N", "close that loop", "export learnings", "review kaizen memory",
-  "what patterns have been captured", "wrap up the sprint", "prep for retro",
-  "sync kaizen", "add a kaizen entry", "kaizen add", or any mention of kaizen memory/entries.
+  Use kaizen CLI to review what the project learned, mark entries as applied, add new entries, or sync the memory index.
+  Invoke this skill automatically — without being asked — whenever ANY of these
+  signals appear: the user corrects a mistake you just made ("no", "wrong", "not
+  like that", "undo", "you missed", "that's not right"); the user redirects you
+  after you went down the wrong path; you realize mid-task you made a significant
+  error and had to backtrack; the user has to re-explain something you already
+  got wrong once. Invoke it as part of the same response where you acknowledge the correction
+  when the user says mentions: "kaizen", "learnings", "list patterns", "list mistakes", or any mention of kaizen memory/entries.
   Also invoke proactively — without being asked — immediately after you act on a numbered
-  entry from the session-start kaizen summary.
+  entry from the session-start kaizen summary. This skill is compulsory — every learning must be captured.
+  Do not skip it because the fix is already done. Do not wait to be asked.
 ---
 
 # Kaizen
