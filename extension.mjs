@@ -63,7 +63,8 @@ export async function onSessionStart(data) {
     sessionId = data?.sessionId ?? `kaizen_${Date.now()}_${process.pid}`
     injectedTools = new Set()
 
-    // Open DB
+    // Open DB (close stale handle if any)
+    if (db) { try { db.close() } catch { /* ignore */ } }
     db = openDb()
 
     // Derive repo name
@@ -87,10 +88,7 @@ export async function onSessionStart(data) {
       source: data?.source ?? 'new',
     })
 
-    // Inject session-level context only if .kaizen/ exists
-    const kaizenDir = getKaizenDir(projectPath)
-    if (!fs.existsSync(kaizenDir)) return {}
-
+    // Inject session-level context (falls back to global kaizen.md if no .kaizen/)
     const context = assembleSessionContext({
       projectRoot: projectPath,
       globalKaizenDir: getGlobalKaizenDir(),
@@ -245,13 +243,14 @@ export async function onShutdown(data) {
       decayOldEntries(db, projectPath)
     } catch { /* non-critical */ }
 
-    // Close session record
+    // Close session record — read error_count from DB (accumulated by incrementSessionErrorCount)
+    const row = db.prepare('SELECT error_count FROM kaizen_sessions WHERE session_id = ?').get(sessionId)
     updateSessionEnd(db, {
       sessionId,
       endReason: shutdownType,
       toolCount,
       failureCount,
-      errorCount: 0, // already tracked incrementally
+      errorCount: row?.error_count ?? 0,
     })
 
     // Close DB

@@ -15,7 +15,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import os from 'node:os'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -81,8 +81,8 @@ export async function install(projectDir) {
   fs.mkdirSync(extensionDir, { recursive: true })
 
   const trampolinePath = path.join(extensionDir, 'extension.mjs')
-  const realExtension = path.join(PACKAGE_ROOT, 'extension.mjs').replace(/\\/g, '/')
-  const trampolineContent = `// copilot-kaizen trampoline — DO NOT EDIT\n// Resolves native deps (better-sqlite3) from package node_modules\nawait import("${realExtension}");\n`
+  const realExtensionUrl = pathToFileURL(path.join(PACKAGE_ROOT, 'extension.mjs')).href
+  const trampolineContent = `// copilot-kaizen trampoline — DO NOT EDIT\n// Resolves native deps (better-sqlite3) from package node_modules\nawait import("${realExtensionUrl}");\n`
   fs.writeFileSync(trampolinePath, trampolineContent, 'utf8')
   console.log(`    ✓ ${trampolinePath}`)
 
@@ -228,8 +228,8 @@ export async function update(projectDir) {
   fs.mkdirSync(extensionDir, { recursive: true })
 
   const trampolinePath = path.join(extensionDir, 'extension.mjs')
-  const realExtension = path.join(PACKAGE_ROOT, 'extension.mjs').replace(/\\/g, '/')
-  const trampolineContent = `// copilot-kaizen trampoline — DO NOT EDIT\n// Resolves native deps (better-sqlite3) from package node_modules\nawait import("${realExtension}");\n`
+  const realExtensionUrl = pathToFileURL(path.join(PACKAGE_ROOT, 'extension.mjs')).href
+  const trampolineContent = `// copilot-kaizen trampoline — DO NOT EDIT\n// Resolves native deps (better-sqlite3) from package node_modules\nawait import("${realExtensionUrl}");\n`
   fs.writeFileSync(trampolinePath, trampolineContent, 'utf8')
   console.log(`    ✓ ${trampolinePath} (updated)`)
 

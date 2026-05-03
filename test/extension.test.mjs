@@ -259,5 +259,40 @@ describe('extension handlers', () => {
         db.close()
       }
     })
+
+    it('preserves error_count accumulated by onErrorOccurred', async () => {
+      const id = sid('err-preserve')
+      await onSessionStart({ sessionId: id, cwd: TEST_DIR })
+      // Trigger 2 errors
+      await onErrorOccurred({ sessionId: id, error: 'err1', cwd: TEST_DIR })
+      await onErrorOccurred({ sessionId: id, error: 'err2', cwd: TEST_DIR })
+      await onShutdown({ shutdownType: 'routine' })
+
+      const { openDb } = await import('../lib/db.mjs')
+      const db = openDb()
+      try {
+        const row = db.prepare("SELECT error_count FROM kaizen_sessions WHERE session_id = ?").get(id)
+        assert.equal(row.error_count, 2, 'shutdown must not overwrite error_count')
+      } finally {
+        db.close()
+      }
+    })
+
+    it('handles double onSessionStart without leaking DB handles', async () => {
+      const id1 = sid('dbl-start-1')
+      const id2 = sid('dbl-start-2')
+      await onSessionStart({ sessionId: id1, cwd: TEST_DIR })
+      const db1 = _getDb()
+      assert.ok(db1, 'first DB should be open')
+
+      // Second onSessionStart should close the first handle
+      await onSessionStart({ sessionId: id2, cwd: TEST_DIR })
+      const db2 = _getDb()
+      assert.ok(db2, 'second DB should be open')
+
+      // Verify first handle is closed (throws if used)
+      assert.throws(() => db1.prepare('SELECT 1'), /database.*not open|database.*closed/i,
+        'first DB handle should be closed after second onSessionStart')
+    })
   })
 })

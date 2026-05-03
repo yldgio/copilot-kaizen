@@ -38,6 +38,7 @@ describe('installer', () => {
     const content = fs.readFileSync(trampolinePath, 'utf8')
     assert.ok(content.includes('await import('), 'trampoline should use dynamic import')
     assert.ok(content.includes('extension.mjs'), 'trampoline should point to extension.mjs')
+    assert.ok(content.includes('file:///'), 'trampoline must use file:// URL scheme for ESM compatibility')
 
     // Skills
     assert.ok(fs.existsSync(path.join(TEST_DIR, '.agents', 'skills', 'kaizen', 'SKILL.md')))
