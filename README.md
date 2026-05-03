@@ -31,6 +31,10 @@ your conventions, your common mistakes, and your tool preferences.
 │                                                          │
 │  session.shutdown ► Synthesize learnings into .kaizen/  │
 │                     Decay old entries, update stats      │
+│                                                          │
+│  Tools:                                                  │
+│    kaizen_remember ► Agent saves a learning directly    │
+│    kaizen_search ──► Agent queries existing learnings   │
 └──────────────────────────────────────────────────────────┘
 ```
 
@@ -38,17 +42,26 @@ your conventions, your common mistakes, and your tool preferences.
 
 ## Quick Install
 
+**Bash (Linux/macOS):**
 ```bash
-# Clone and install globally
+curl -fsSL https://raw.githubusercontent.com/yldgio/copilot-kaizen/main/install.sh | bash
+```
+
+**PowerShell (Windows):**
+```powershell
+irm https://raw.githubusercontent.com/yldgio/copilot-kaizen/main/install.ps1 | iex
+```
+
+> **Prerequisites:** Node.js 18+ and npm. The one-liners install globally and set up kaizen in the current project (if in a git repo).
+
+**Manual install:**
+```bash
 git clone https://github.com/yldgio/copilot-kaizen.git
 cd copilot-kaizen && npm install && npm link
 
-# Set up in your project
 cd your-project
 kaizen install .
 ```
-
-> **Prerequisites:** Node.js 18+ and npm.
 
 ---
 
@@ -90,6 +103,21 @@ needs to be gitignored.
 
 ---
 
+## Native Tools
+
+The extension exposes two SDK tools that the agent can call directly — no bash needed:
+
+| Tool | Purpose |
+|------|---------|
+| `kaizen_remember` | Save a learning (mistake, convention, pattern, memory, preference) |
+| `kaizen_search` | Query existing learnings by keyword and/or category |
+
+These tools are available automatically in any Copilot CLI session where kaizen is installed.
+The agent calls `kaizen_remember` when it detects something worth saving (user corrections,
+discovered patterns, etc.) and `kaizen_search` to check for duplicates before saving.
+
+---
+
 ## CLI Commands
 
 | Command | Description |
@@ -111,6 +139,7 @@ needs to be gitignored.
 | `pattern` | Recurring patterns (good or bad) |
 | `memory` | Things the AI should remember |
 | `convention` | Project conventions and rules |
+| `preference` | User/team preferences (language, workflow, style) |
 
 ### Examples
 
