@@ -92,7 +92,9 @@ async function onPreToolUse(data) {
     const toolName = data?.toolName ?? 'unknown'
 
     if (db) {
-      try { insertToolLog(db, { sessionId, projectPath, toolName, eventType: 'pre' }) } catch {}
+      try { insertToolLog(db, { sessionId, projectPath, toolName, eventType: 'pre' }) } catch(e) {
+        session.log(`[kaizen] failed to log tool use: ${toolName}`, { level: 'warning' })
+      }
     }
 
     if (injectedTools.has(toolName)) return {}
@@ -104,7 +106,10 @@ async function onPreToolUse(data) {
       toolName, projectRoot: projectPath, globalKaizenDir: getGlobalKaizenDir(),
     })
 
-    if (!context) return {}
+    if (!context) {
+      await session.log(`[kaizen] no context assembled for tool: ${toolName}`, { level: 'warning' })
+      return {}
+    }
     injectedTools.add(toolName)
     return { additionalContext: context }
   } catch (e) {
