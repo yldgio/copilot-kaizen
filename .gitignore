@@ -47,3 +47,4 @@ docs/hooks-doc.txt
 node_modules/
 phase-*.md
 PowerShellEditorServices.json
+plan.md

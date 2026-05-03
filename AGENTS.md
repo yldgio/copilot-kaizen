@@ -5,6 +5,14 @@ The goal of the plugin is to structure the auto-learning process for LLM agents,
 
 ## Behavioral guidelines
 
+
+If applicable, use RGR to complete the task.
+
+RED: write one test
+GREEN: write the implementation to pass that test
+REPEAT until done
+REFACTOR the code
+
 <verified_claims>
 
 ### 1. No Unverified Technical Claims
