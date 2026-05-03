@@ -191,11 +191,13 @@ copilot-kaizen/
 The installer writes a **trampoline** at `~/.copilot/extensions/kaizen/extension.mjs`:
 
 ```js
-await import("/absolute/path/to/copilot-kaizen/extension.mjs");
+await import("file:///absolute/path/to/copilot-kaizen/extension.mjs");
 ```
 
-This ensures `better-sqlite3` (a native dependency) resolves from the package's
-own `node_modules/`, not from the CLI's extension sandbox.
+The `file:///` URL scheme is required for ESM `import()` on Windows (bare paths
+fail with `ERR_UNSUPPORTED_ESM_URL_SCHEME`). This ensures `better-sqlite3`
+(a native dependency) resolves from the package's own `node_modules/`, not from
+the CLI's extension sandbox.
 
 ### Dependencies
 

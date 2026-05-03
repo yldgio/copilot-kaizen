@@ -7,6 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.0.0] — 2026-05-03
+
+### ⚠ BREAKING CHANGES
+
+- **Architecture**: Migrated from command hooks (`hooks.json` + shell wrappers) to SDK extension (`joinSession()` from `@github/copilot-sdk/extension`). See ADR-0001.
+- **Removed**: `hooks.json`, `hooks/kaizen.sh`, `hooks/kaizen.ps1`, `kaizen.mjs` (old hook dispatcher)
+- **Removed**: `kaizen hook` CLI command and stdin-based hook protocol
+- **Install**: `kaizen install` no longer copies hooks — writes a trampoline extension to `~/.copilot/extensions/kaizen/`
+
+### Added
+
+- SDK extension with 5 hook handlers: `onSessionStart`, `onPreToolUse`, `onPostToolUse`, `onErrorOccurred`, `onShutdown`
+- Session-level context injection via `additionalContext` (now actually works — command hooks silently ignored it)
+- Per-tool context injection from `.kaizen/tools/<tool>.md` (deduplicated per session)
+- Global fallback: injects `~/.copilot/kaizen/kaizen.md` when no `.kaizen/` directory exists
+- `kaizen uninstall` CLI command to remove extension trampoline
+- Trampoline uses `file:///` URL scheme for Windows ESM compatibility (ADR-0002)
+- 22 tests covering all hook handlers and installer
+
+### Fixed
+
+- Context injection now works (command hooks never supported `additionalContext` in `preToolUse`)
+- Trampoline uses `pathToFileURL()` — bare paths fail with `ERR_UNSUPPORTED_ESM_URL_SCHEME` on Windows
+- `onShutdown` preserves `error_count` accumulated by `onErrorOccurred` (was overwritten with 0)
+- DB handle closed before re-opening on duplicate `onSessionStart`
+
+### Upgrade
+
+```bash
+kaizen install .    # Regenerates trampoline, removes legacy hooks
+```
+
 ## [1.1.0](https://github.com/yldgio/copilot-kaizen/compare/v1.0.1...v1.1.0) (2026-04-27)
 
 
