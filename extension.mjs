@@ -1,7 +1,6 @@
 // extension.mjs — Copilot CLI SDK extension for copilot-kaizen
 //
-// Loaded by the CLI runtime via trampoline at ~/.copilot/extensions/kaizen/extension.mjs
-// Top-level ESM — no activate(), no export default.
+// Loaded via trampoline at ~/.copilot/extensions/kaizen/extension.mjs
 //
 // INVARIANT: Must NEVER throw. All hook bodies wrapped in try/catch.
 // INVARIANT: onPreToolUse never returns permissionDecision — kaizen injects context only.
@@ -9,7 +8,6 @@
 import path from 'node:path'
 import fs from 'node:fs'
 import { execSync } from 'node:child_process'
-import os from 'node:os'
 
 import {
   openDb,
@@ -32,7 +30,7 @@ import { synthesize } from './lib/synthesize.mjs'
 import { getProjectRoot, getKaizenDir, getGlobalKaizenDir } from './lib/project.mjs'
 
 // ---------------------------------------------------------------------------
-// Module-scoped state (extension is long-lived, single process)
+// State
 // ---------------------------------------------------------------------------
 
 let db = null
@@ -41,23 +39,15 @@ let projectPath = null
 let cwd = null
 let injectedTools = new Set()
 
-// ---------------------------------------------------------------------------
-// Kill-switch
-// ---------------------------------------------------------------------------
-
 function isSkipped() {
   return process.env.SKIP_KAIZEN === '1'
 }
 
 // ---------------------------------------------------------------------------
-// Exported hook handlers (testable without SDK)
+// Handlers
 // ---------------------------------------------------------------------------
 
-/**
- * @param {object} data — StartData from SDK: { sessionId, cwd, copilotVersion, ... }
- * @returns {{ additionalContext?: string } | {}}
- */
-export async function onSessionStart(data) {
+async function onSessionStart(data) {
   if (isSkipped()) return {}
   try {
     cwd = path.resolve(data?.cwd ?? process.cwd())
@@ -65,32 +55,21 @@ export async function onSessionStart(data) {
     sessionId = data?.sessionId ?? `kaizen_${Date.now()}_${process.pid}`
     injectedTools = new Set()
 
-    // Open DB (close stale handle if any)
-    if (db) { try { db.close() } catch { /* ignore */ } }
+    if (db) { try { db.close() } catch {} }
     db = openDb()
 
-    // Derive repo name
     let repo
     try {
       const remoteUrl = execSync('git remote get-url origin', {
-        cwd,
-        encoding: 'utf8',
-        stdio: ['ignore', 'pipe', 'ignore'],
+        cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'],
       }).trim()
       repo = path.basename(remoteUrl, '.git')
     } catch {
       repo = path.basename(cwd)
     }
 
-    // Insert session record
-    insertSession(db, {
-      sessionId,
-      projectPath,
-      repo,
-      source: data?.source ?? 'new',
-    })
+    insertSession(db, { sessionId, projectPath, repo, source: data?.source ?? 'new' })
 
-    // Inject session-level context (falls back to global kaizen.md if no .kaizen/)
     const context = assembleSessionContext({
       projectRoot: projectPath,
       globalKaizenDir: getGlobalKaizenDir(),
@@ -103,37 +82,25 @@ export async function onSessionStart(data) {
   }
 }
 
-/**
- * @param {object} data — { sessionId, timestamp, cwd, toolName, toolArgs (JSON string) }
- * @returns {{ additionalContext?: string } | {}}
- */
-export async function onPreToolUse(data) {
+async function onPreToolUse(data) {
   if (isSkipped()) return {}
   try {
     const toolName = data?.toolName ?? 'unknown'
 
-    // DB log (fire-and-forget)
     if (db) {
-      try {
-        insertToolLog(db, { sessionId, projectPath, toolName, eventType: 'pre' })
-      } catch { /* swallow */ }
+      try { insertToolLog(db, { sessionId, projectPath, toolName, eventType: 'pre' }) } catch {}
     }
 
-    // Injection guard: once per tool per session
     if (injectedTools.has(toolName)) return {}
 
-    // Check if .kaizen/ exists for injection
     const kaizenDir = getKaizenDir(projectPath)
     if (!fs.existsSync(kaizenDir)) return {}
 
     const context = assembleToolContext({
-      toolName,
-      projectRoot: projectPath,
-      globalKaizenDir: getGlobalKaizenDir(),
+      toolName, projectRoot: projectPath, globalKaizenDir: getGlobalKaizenDir(),
     })
 
     if (!context) return {}
-
     injectedTools.add(toolName)
     return { additionalContext: context }
   } catch {
@@ -141,144 +108,75 @@ export async function onPreToolUse(data) {
   }
 }
 
-/**
- * @param {object} data — { sessionId, timestamp, cwd, toolName, toolArgs (object), toolResult: { resultType, textResultForLlm } }
- */
-export async function onPostToolUse(data) {
+async function onPostToolUse(data) {
   if (isSkipped()) return
   try {
     const toolName = data?.toolName ?? 'unknown'
     const resultType = data?.toolResult?.resultType ?? 'unknown'
-    const eventTypeMap = {
-      success: 'post:success',
-      failure: 'post:failure',
-      denied: 'post:denied',
-    }
-    const eventType = eventTypeMap[resultType] ?? 'post:unknown'
-
-    if (db) {
-      insertToolLog(db, { sessionId, projectPath, toolName, eventType })
-    }
-  } catch { /* swallow */ }
+    const eventType = { success: 'post:success', failure: 'post:failure', denied: 'post:denied' }[resultType] ?? 'post:unknown'
+    if (db) insertToolLog(db, { sessionId, projectPath, toolName, eventType })
+  } catch {}
 }
 
-/**
- * @param {object} data — { error: string | { name, message }, ... }
- */
-export async function onErrorOccurred(data) {
+async function onErrorOccurred(data) {
   if (isSkipped()) return
   try {
     const error = data?.error
-    let content
-    if (typeof error === 'string') {
-      content = error
-    } else {
-      const errorName = error?.name ?? 'Error'
-      const errorMessage = error?.message ?? 'unknown'
-      content = `[${errorName}] ${errorMessage}`
-    }
+    const content = typeof error === 'string'
+      ? error
+      : `[${error?.name ?? 'Error'}] ${error?.message ?? 'unknown'}`
 
     if (db) {
-      upsertEntry(db, {
-        projectPath,
-        category: 'mistake',
-        source: 'auto',
-        content,
-      })
+      upsertEntry(db, { projectPath, category: 'mistake', source: 'auto', content })
       incrementSessionErrorCount(db, sessionId)
     }
-  } catch { /* swallow */ }
+  } catch {}
 }
 
-/**
- * Called from session.on("session.shutdown") event handler.
- * @param {object} data — ShutdownData: { shutdownType, totalPremiumRequests, ... }
- */
-export async function onShutdown(data) {
+async function onShutdown(data) {
   if (isSkipped()) return
   try {
     if (!db) return
-
     const shutdownType = data?.shutdownType ?? 'routine'
-
-    // Aggregate tool counts
     const { toolCount, failureCount } = getSessionToolCounts(db, sessionId)
 
-    // Extract tool-failure insights
     try {
       const failedTools = db.prepare(`
-        SELECT tool_name, COUNT(*) as n
-          FROM kaizen_tool_log
-         WHERE session_id = ?
-           AND event_type = 'post:failure'
-         GROUP BY tool_name
-        HAVING n >= 3
+        SELECT tool_name, COUNT(*) as n FROM kaizen_tool_log
+        WHERE session_id = ? AND event_type = 'post:failure'
+        GROUP BY tool_name HAVING n >= 3
       `).all(sessionId)
-
       for (const row of failedTools) {
         upsertEntry(db, {
-          projectPath,
-          category: 'pattern',
-          source: 'auto',
+          projectPath, category: 'pattern', source: 'auto',
           content: `Tool ${row.tool_name} failed ${row.n} times in a single session`,
         })
       }
-    } catch { /* non-critical */ }
+    } catch {}
 
-    // Synthesis (skip on error shutdowns)
     if (shutdownType !== 'error') {
       try {
         const kaizenDir = getKaizenDir(projectPath)
         if (fs.existsSync(kaizenDir)) {
-          synthesize({
-            db,
-            projectPath,
-            kaizenDir,
-            globalKaizenDir: getGlobalKaizenDir(),
-          })
+          synthesize({ db, projectPath, kaizenDir, globalKaizenDir: getGlobalKaizenDir() })
         }
-      } catch { /* synthesis failure must not propagate */ }
+      } catch {}
     }
 
-    // Decay old entries
-    try {
-      decayOldEntries(db, projectPath)
-    } catch { /* non-critical */ }
+    try { decayOldEntries(db, projectPath) } catch {}
 
-    // Close session record — read error_count from DB (accumulated by incrementSessionErrorCount)
     const row = db.prepare('SELECT error_count FROM kaizen_sessions WHERE session_id = ?').get(sessionId)
     updateSessionEnd(db, {
-      sessionId,
-      endReason: shutdownType,
-      toolCount,
-      failureCount,
+      sessionId, endReason: shutdownType, toolCount, failureCount,
       errorCount: row?.error_count ?? 0,
     })
 
-    // Close DB
     db.close()
     db = null
-  } catch { /* swallow */ }
+  } catch {}
 }
 
-// ---------------------------------------------------------------------------
-// Test helper — expose DB for test assertions
-// ---------------------------------------------------------------------------
-
-export function _getDb() {
-  return db
-}
-
-// ---------------------------------------------------------------------------
-// SDK Tool definitions — exposed via joinSession({ tools })
-// ---------------------------------------------------------------------------
-
-/**
- * Handler for kaizen_remember tool. Saves a learning to the DB.
- * @param {{ category: string, content: string }} args
- * @returns {string}
- */
-export async function handleRemember(args) {
+async function handleRemember(args) {
   if (!db) return 'Kaizen DB not available — session may not have started yet.'
   if (!projectPath) return 'No project path — session may not have started yet.'
 
@@ -287,7 +185,6 @@ export async function handleRemember(args) {
 
   upsertEntry(db, { projectPath, category, source: 'agent', content })
 
-  // Exact-match lookup for hit count (not relying on fuzzy search which may miss low-hit entries)
   const current = db.prepare(
     'SELECT hit_count FROM kaizen_entries WHERE project_path = ? AND category = ? AND content = ?'
   ).get(projectPath, category, content)
@@ -295,7 +192,6 @@ export async function handleRemember(args) {
 
   let response = `✓ Saved ${category} entry${hitInfo}: "${content}"`
 
-  // Show similar entries for dedup awareness (exclude the exact match)
   try {
     const similar = searchEntries(db, { projectPath, query: content.split(/\s+/).slice(0, 3).join(' '), limit: 3 })
     const others = similar.filter(e => e.content !== content)
@@ -305,16 +201,11 @@ export async function handleRemember(args) {
         response += `\n  #${e.id} [${e.category}] (${e.hit_count}x): ${e.content}`
       }
     }
-  } catch { /* non-critical — dedup hint is best-effort */ }
+  } catch {}
   return response
 }
 
-/**
- * Handler for kaizen_search tool. Queries existing learnings.
- * @param {{ query: string, category?: string, limit?: number }} args
- * @returns {string}
- */
-export async function handleSearch(args) {
+async function handleSearch(args) {
   if (!db) return 'Kaizen DB not available — session may not have started yet.'
   if (!projectPath) return 'No project path — session may not have started yet.'
 
@@ -340,7 +231,7 @@ export async function handleSearch(args) {
   return response
 }
 
-export const TOOL_DEFINITIONS = [
+const TOOL_DEFINITIONS = [
   {
     name: 'kaizen_remember',
     description:
@@ -353,9 +244,7 @@ export const TOOL_DEFINITIONS = [
       properties: {
         category: {
           type: 'string',
-          description:
-            'Category for this learning (e.g. mistake, convention, ' +
-            'pattern, memory, preference — or any custom category).',
+          description: 'Category for this learning (e.g. mistake, convention, pattern, memory, preference — or any custom category).',
         },
         content: {
           type: 'string',
@@ -374,18 +263,9 @@ export const TOOL_DEFINITIONS = [
     parameters: {
       type: 'object',
       properties: {
-        query: {
-          type: 'string',
-          description: 'Keyword to search for in entry content.',
-        },
-        category: {
-          type: 'string',
-          description: 'Optional: filter by category.',
-        },
-        limit: {
-          type: 'integer',
-          description: 'Max results (default 10).',
-        },
+        query: { type: 'string', description: 'Keyword to search for in entry content.' },
+        category: { type: 'string', description: 'Optional: filter by category.' },
+        limit: { type: 'integer', description: 'Max results (default 10).' },
       },
       required: ['query'],
     },
@@ -393,4 +273,40 @@ export const TOOL_DEFINITIONS = [
   },
 ]
 
+// ---------------------------------------------------------------------------
+// SDK wiring — session.log() for observability
+// ---------------------------------------------------------------------------
 
+const { joinSession } = await import('@github/copilot-sdk/extension')
+
+const session = await joinSession({
+  hooks: {
+    onSessionStart: async (data) => {
+      const result = await onSessionStart(data)
+      const chars = result?.additionalContext?.length ?? 0
+      await session.log(`[kaizen] session start — injected ${chars} chars`)
+      return result
+    },
+    onPreToolUse: async (data) => {
+      const result = await onPreToolUse(data)
+      if (result?.additionalContext) {
+        await session.log(`[kaizen] injected context for tool: ${data?.toolName}`)
+      }
+      return result
+    },
+    onPostToolUse,
+    onErrorOccurred: async (data) => {
+      await onErrorOccurred(data)
+      const msg = typeof data?.error === 'string' ? data.error : data?.error?.message ?? 'unknown'
+      await session.log(`[kaizen] error recorded: ${msg}`, { level: 'warning' })
+    },
+  },
+  tools: TOOL_DEFINITIONS,
+})
+
+session.on('session.shutdown', async (event) => {
+  await onShutdown(event?.data ?? event)
+  await session.log('[kaizen] shutdown complete')
+})
+
+await session.log('[kaizen] extension ready')
