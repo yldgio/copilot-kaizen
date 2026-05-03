@@ -45,7 +45,7 @@ Per-project directory containing markdown files that hold synthesized learnings.
 _Avoid_: config directory, memory folder
 
 **Tool Log**:
-A timestamped record of a single tool invocation event (`pre:invoke`, `post:success`, `post:failure`). Stored in `kaizen_tool_log`, used for failure summaries and session statistics.
+A timestamped record of a single tool invocation event (`pre`, `post:success`, `post:failure`). Stored in `kaizen_tool_log`, used for failure summaries and session statistics.
 _Avoid_: event log, usage record
 
 **Session**:
