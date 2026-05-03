@@ -16,6 +16,8 @@ import {
   insertToolLog,
   incrementSessionErrorCount,
   getSessionToolCounts,
+  getSessionErrorCount,
+  getEntryHitCount,
   searchEntries,
 } from '../lib/db.mjs'
 
@@ -28,6 +30,13 @@ import { getProjectRoot, getKaizenDir } from '../lib/project.mjs'
 
 const RUN_ID = `${process.pid}-${Date.now()}`
 const TEST_DIR = path.join(os.tmpdir(), `kaizen-test-${RUN_ID}`)
+
+// sql.js exec returns [{columns, values}] — convert to object for assertions
+function queryRow(db, sql, params) {
+  const results = db.exec(sql, params)
+  if (!results.length || !results[0].values.length) return undefined
+  return Object.fromEntries(results[0].columns.map((c, i) => [c, results[0].values[0][i]]))
+}
 const KAIZEN_DIR = path.join(TEST_DIR, '.kaizen')
 const TOOLS_DIR = path.join(KAIZEN_DIR, 'tools')
 const DB_PATH = path.join(os.tmpdir(), `kaizen-test-${RUN_ID}.db`)
@@ -63,13 +72,13 @@ describe('kaizen core', () => {
     it('inserts and updates a session record', () => {
       const id = sid('sess-1')
       insertSession(db, { sessionId: id, projectPath: TEST_DIR, repo: 'test-repo', source: 'new' })
-      const row = db.prepare('SELECT * FROM kaizen_sessions WHERE session_id = ?').get(id)
+      const row = queryRow(db, 'SELECT * FROM kaizen_sessions WHERE session_id = ?', [id])
       assert.ok(row)
       assert.equal(row.repo, 'test-repo')
       assert.equal(row.project_path, TEST_DIR)
 
       updateSessionEnd(db, { sessionId: id, endReason: 'routine', toolCount: 3, failureCount: 1, errorCount: 0 })
-      const updated = db.prepare('SELECT * FROM kaizen_sessions WHERE session_id = ?').get(id)
+      const updated = queryRow(db, 'SELECT * FROM kaizen_sessions WHERE session_id = ?', [id])
       assert.ok(updated.ended_at)
       assert.equal(updated.end_reason, 'routine')
       assert.equal(updated.tool_count, 3)
@@ -80,8 +89,8 @@ describe('kaizen core', () => {
       insertSession(db, { sessionId: id, projectPath: TEST_DIR, repo: 'r', source: 'new' })
       incrementSessionErrorCount(db, id)
       incrementSessionErrorCount(db, id)
-      const row = db.prepare('SELECT error_count FROM kaizen_sessions WHERE session_id = ?').get(id)
-      assert.equal(row.error_count, 2)
+      const count = getSessionErrorCount(db, id)
+      assert.equal(count, 2)
     })
   })
 
@@ -114,8 +123,8 @@ describe('kaizen core', () => {
       upsertEntry(db, { projectPath: TEST_DIR, category: 'convention', source: 'agent', content: 'Use strict mode' })
       upsertEntry(db, { projectPath: TEST_DIR, category: 'convention', source: 'agent', content: 'Use strict mode' })
 
-      const row = db.prepare("SELECT hit_count FROM kaizen_entries WHERE content = 'Use strict mode'").get()
-      assert.equal(row.hit_count, 2)
+      const count = getEntryHitCount(db, { projectPath: TEST_DIR, category: 'convention', content: 'Use strict mode' })
+      assert.equal(count, 2)
     })
 
     it('filters by category', () => {

@@ -82,7 +82,7 @@ export async function install(projectDir) {
 
   const trampolinePath = path.join(extensionDir, 'extension.mjs')
   const realExtensionUrl = pathToFileURL(path.join(PACKAGE_ROOT, 'extension.mjs')).href
-  const trampolineContent = `// copilot-kaizen trampoline — DO NOT EDIT\n// Resolves native deps (better-sqlite3) from package node_modules\nawait import("${realExtensionUrl}");\n`
+  const trampolineContent = `// copilot-kaizen trampoline — DO NOT EDIT\nawait import("${realExtensionUrl}");\n`
   fs.writeFileSync(trampolinePath, trampolineContent, 'utf8')
   console.log(`    ✓ ${trampolinePath}`)
 
@@ -229,7 +229,7 @@ export async function update(projectDir) {
 
   const trampolinePath = path.join(extensionDir, 'extension.mjs')
   const realExtensionUrl = pathToFileURL(path.join(PACKAGE_ROOT, 'extension.mjs')).href
-  const trampolineContent = `// copilot-kaizen trampoline — DO NOT EDIT\n// Resolves native deps (better-sqlite3) from package node_modules\nawait import("${realExtensionUrl}");\n`
+  const trampolineContent = `// copilot-kaizen trampoline — DO NOT EDIT\nawait import("${realExtensionUrl}");\n`
   fs.writeFileSync(trampolinePath, trampolineContent, 'utf8')
   console.log(`    ✓ ${trampolinePath} (updated)`)
 

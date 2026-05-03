@@ -19,6 +19,9 @@ import {
   getSessionToolCounts,
   decayOldEntries,
   searchEntries,
+  getFrequentlyFailingTools,
+  getSessionErrorCount,
+  getEntryHitCount,
 } from './lib/db.mjs'
 
 import {
@@ -77,7 +80,8 @@ async function onSessionStart(data) {
 
     if (!context) return {}
     return { additionalContext: context }
-  } catch {
+  } catch (e) {
+    await session.log(`[kaizen] onSessionStart error: ${e.message}`, { level: 'error' })
     return {}
   }
 }
@@ -103,7 +107,8 @@ async function onPreToolUse(data) {
     if (!context) return {}
     injectedTools.add(toolName)
     return { additionalContext: context }
-  } catch {
+  } catch (e) {
+    await session.log(`[kaizen] onPreToolUse error: ${e.message}`, { level: 'error' })
     return {}
   }
 }
@@ -115,7 +120,9 @@ async function onPostToolUse(data) {
     const resultType = data?.toolResult?.resultType ?? 'unknown'
     const eventType = { success: 'post:success', failure: 'post:failure', denied: 'post:denied' }[resultType] ?? 'post:unknown'
     if (db) insertToolLog(db, { sessionId, projectPath, toolName, eventType })
-  } catch {}
+  } catch (e) {
+    await session.log(`[kaizen] onPostToolUse error: ${e.message}`, { level: 'error' })
+  }
 }
 
 async function onErrorOccurred(data) {
@@ -130,8 +137,9 @@ async function onErrorOccurred(data) {
       upsertEntry(db, { projectPath, category: 'mistake', source: 'auto', content })
       incrementSessionErrorCount(db, sessionId)
     }
-  } catch {}
-}
+  } catch (e) {
+    await session.log(`[kaizen] onErrorOccurred error: ${e.message}`, { level: 'error' })
+  }
 
 async function onShutdown(data) {
   if (isSkipped()) return
@@ -141,11 +149,7 @@ async function onShutdown(data) {
     const { toolCount, failureCount } = getSessionToolCounts(db, sessionId)
 
     try {
-      const failedTools = db.prepare(`
-        SELECT tool_name, COUNT(*) as n FROM kaizen_tool_log
-        WHERE session_id = ? AND event_type = 'post:failure'
-        GROUP BY tool_name HAVING n >= 3
-      `).all(sessionId)
+      const failedTools = getFrequentlyFailingTools(db, sessionId)
       for (const row of failedTools) {
         upsertEntry(db, {
           projectPath, category: 'pattern', source: 'auto',
@@ -165,10 +169,10 @@ async function onShutdown(data) {
 
     try { decayOldEntries(db, projectPath) } catch {}
 
-    const row = db.prepare('SELECT error_count FROM kaizen_sessions WHERE session_id = ?').get(sessionId)
+    const errorCount = getSessionErrorCount(db, sessionId)
     updateSessionEnd(db, {
       sessionId, endReason: shutdownType, toolCount, failureCount,
-      errorCount: row?.error_count ?? 0,
+      errorCount,
     })
 
     db.close()
@@ -185,10 +189,8 @@ async function handleRemember(args) {
 
   upsertEntry(db, { projectPath, category, source: 'agent', content })
 
-  const current = db.prepare(
-    'SELECT hit_count FROM kaizen_entries WHERE project_path = ? AND category = ? AND content = ?'
-  ).get(projectPath, category, content)
-  const hitInfo = current && current.hit_count > 1 ? ` (seen ${current.hit_count}x)` : ' (new)'
+  const hitCount = getEntryHitCount(db, { projectPath, category, content })
+  const hitInfo = hitCount > 1 ? ` (seen ${hitCount}x)` : ' (new)'
 
   let response = `✓ Saved ${category} entry${hitInfo}: "${content}"`
 

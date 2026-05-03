@@ -26,10 +26,6 @@
     "README.md",
     "LICENSE"
   ],
-  "dependencies": {
-    "better-sqlite3": "^11.7.0"
-  },
-  "devDependencies": {},
   "scripts": {
     "test": "node --test test/*.test.mjs",
     "lint": "echo 'no linter configured'",
@@ -58,5 +54,8 @@
   "publishConfig": {
     "registry": "https://npm.pkg.github.com",
     "access": "restricted"
+  },
+  "dependencies": {
+    "sql.js": "^1.14.1"
   }
 }
