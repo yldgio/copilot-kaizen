@@ -1,16 +1,11 @@
-// test/extension.test.mjs — Tests for the new extension.mjs
-// Tests exercise handler functions directly (no SDK dependency)
-//
-// Uses __KAIZEN_TEST_MODE=1 to skip joinSession() call.
+// test/extension.test.mjs — Tests for extension handlers
+// Tests import extension.mjs directly (handlers only, no SDK).
 
 import { describe, it, beforeEach, afterEach } from 'node:test'
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import path from 'node:path'
 import os from 'node:os'
-
-// Set test mode BEFORE importing extension
-process.env.__KAIZEN_TEST_MODE = '1'
 
 const {
   onSessionStart,
@@ -326,8 +321,7 @@ describe('extension handlers', () => {
     it('kaizen_remember requires category and content', () => {
       const tool = TOOL_DEFINITIONS[0]
       assert.deepEqual(tool.parameters.required, ['category', 'content'])
-      assert.ok(tool.parameters.properties.category.enum.includes('preference'),
-        'should include preference category')
+      assert.equal(tool.parameters.properties.category.type, 'string')
     })
 
     it('kaizen_search requires only query', () => {
@@ -359,11 +353,11 @@ describe('extension handlers', () => {
       assert.ok(result.includes('(seen 2x)'), `should show hit count, got: ${result}`)
     })
 
-    it('rejects invalid category', async () => {
-      const id = sid('remember-bad')
+    it('accepts any category', async () => {
+      const id = sid('remember-custom')
       await onSessionStart({ sessionId: id, cwd: TEST_DIR })
-      const result = await handleRemember({ category: 'invalid', content: 'test' })
-      assert.ok(result.includes('Invalid category'), result)
+      const result = await handleRemember({ category: 'custom-cat', content: 'test learning' })
+      assert.ok(result.includes('Saved custom-cat'), result)
     })
 
     it('rejects missing fields', async () => {
@@ -431,11 +425,11 @@ describe('extension handlers', () => {
       assert.ok(result.includes('Missing required'), result)
     })
 
-    it('rejects invalid category', async () => {
-      const id = sid('search-badcat')
+    it('accepts any category filter', async () => {
+      const id = sid('search-anycat')
       await onSessionStart({ sessionId: id, cwd: TEST_DIR })
-      const result = await handleSearch({ query: 'test', category: 'bogus' })
-      assert.ok(result.includes('Invalid category'), result)
+      const result = await handleSearch({ query: 'test', category: 'custom-cat' })
+      assert.ok(!result.includes('Invalid category'), result)
     })
   })
 })

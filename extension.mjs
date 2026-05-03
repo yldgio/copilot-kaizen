@@ -9,6 +9,7 @@
 import path from 'node:path'
 import fs from 'node:fs'
 import { execSync } from 'node:child_process'
+import os from 'node:os'
 
 import {
   openDb,
@@ -272,8 +273,6 @@ export function _getDb() {
 // SDK Tool definitions — exposed via joinSession({ tools })
 // ---------------------------------------------------------------------------
 
-const VALID_CATEGORIES = ['mistake', 'pattern', 'convention', 'memory', 'preference']
-
 /**
  * Handler for kaizen_remember tool. Saves a learning to the DB.
  * @param {{ category: string, content: string }} args
@@ -285,9 +284,6 @@ export async function handleRemember(args) {
 
   const { category, content } = args ?? {}
   if (!category || !content) return 'Missing required fields: category and content.'
-  if (!VALID_CATEGORIES.includes(category)) {
-    return `Invalid category "${category}". Valid: ${VALID_CATEGORIES.join(', ')}`
-  }
 
   upsertEntry(db, { projectPath, category, source: 'agent', content })
 
@@ -324,9 +320,6 @@ export async function handleSearch(args) {
 
   const { query, category, limit: rawLimit } = args ?? {}
   if (!query) return 'Missing required field: query.'
-  if (category && !VALID_CATEGORIES.includes(category)) {
-    return `Invalid category "${category}". Valid: ${VALID_CATEGORIES.join(', ')}`
-  }
 
   const limit = Number.isInteger(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 100) : 10
 
@@ -360,11 +353,9 @@ export const TOOL_DEFINITIONS = [
       properties: {
         category: {
           type: 'string',
-          enum: VALID_CATEGORIES,
           description:
-            'mistake = user corrected an error; convention = project rule; ' +
-            'pattern = recurring approach; memory = project fact; ' +
-            'preference = user/team preference',
+            'Category for this learning (e.g. mistake, convention, ' +
+            'pattern, memory, preference — or any custom category).',
         },
         content: {
           type: 'string',
@@ -389,7 +380,6 @@ export const TOOL_DEFINITIONS = [
         },
         category: {
           type: 'string',
-          enum: VALID_CATEGORIES,
           description: 'Optional: filter by category.',
         },
         limit: {
@@ -403,31 +393,4 @@ export const TOOL_DEFINITIONS = [
   },
 ]
 
-// ---------------------------------------------------------------------------
-// SDK integration — top-level joinSession call
-// Only runs when NOT in test mode.
-// ---------------------------------------------------------------------------
-
-if (!process.env.__KAIZEN_TEST_MODE) {
-  try {
-    const { joinSession } = await import('@github/copilot-sdk/extension')
-
-    const session = await joinSession({
-      hooks: {
-        onSessionStart,
-        onPreToolUse,
-        onPostToolUse,
-        onErrorOccurred,
-      },
-      tools: TOOL_DEFINITIONS,
-    })
-
-    session.on('session.shutdown', (event) => {
-      onShutdown(event?.data ?? event)
-    })
-  } catch (e) {
-    // Extension load failure must not crash the CLI
-    // This happens in dev environments where SDK isn't installed
-  }
-}
 

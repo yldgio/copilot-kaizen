@@ -110,13 +110,6 @@ async function runAdd(args) {
 
   const category = args[0]
   const content = args.slice(1).join(' ')
-  const validCategories = ['mistake', 'pattern', 'memory', 'convention', 'preference']
-
-  if (!validCategories.includes(category)) {
-    console.error(`Invalid category: ${category}`)
-    console.error(`Valid categories: ${validCategories.join(', ')}`)
-    process.exit(1)
-  }
 
   const { openDb, upsertEntry } = await import('../lib/db.mjs')
   const { getProjectRoot } = await import('../lib/project.mjs')
