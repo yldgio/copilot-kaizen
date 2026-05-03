@@ -92,3 +92,29 @@ For multi-step tasks, state a brief plan:
 
 Strong success criteria let you loop independently. Weak criteria ("make it work") require constant clarification.
 </goal_driven_execution>
+
+<testing>
+
+### 6. Testing Discipline
+
+**Il codice è indipendente dai test. Mai il contrario.**
+
+- Mai inserire branch condizionali per i test nel codice di produzione (`if (!__TEST_MODE)`, `if (process.env.TEST)`, ecc.). Se lo fai, il codice è scritto male.
+- Mai creare file, export, o parametri che esistono solo per rendere il codice testabile. Se non riesci a testarlo, l'architettura è sbagliata.
+- Mai adattare il codice ai test. I test si adattano al codice.
+- Se il codice non è testabile, o il codice è scritto male o il test è inutile. Riscrivi il codice, non aggiungere hack.
+- I test esercitano le funzioni di `lib/` direttamente con DB temporanei isolati. Non importano mai il layer di wiring SDK (`extension.mjs`).
+</testing>
+
+<no_wrappers>
+
+### 7. Non Reinventare Quello Che Esiste
+
+**Se il SDK lo fornisce, usalo. Non wrapparlo.**
+
+- Non creare librerie custom per funzionalità che il framework/SDK già offre (es: `session.log()` esiste → non creare `lib/log.mjs`).
+- Non creare file separati "per separazione dei concern" quando un singolo file è più chiaro (es: non splittare `extension.mjs` in `extension.mjs` + `entrypoint.mjs`).
+- Non aggiungere env var o astrazioni solo per facilitare i test.
+- Un file singolo è meglio di due file se il secondo esiste solo per testabilità o "pulizia architettturale" che nessuno ha chiesto.
+- Riferimento architetturale: `copilot-ledger` — un solo `extension.mjs` con `joinSession()` a module-level, handler privati (nessun export), `session.log()` per osservabilità.
+</no_wrappers>
