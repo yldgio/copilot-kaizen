@@ -19,6 +19,7 @@ import {
   incrementSessionErrorCount,
   getSessionToolCounts,
   decayOldEntries,
+  searchEntries,
 } from './lib/db.mjs'
 
 import {
@@ -268,6 +269,141 @@ export function _getDb() {
 }
 
 // ---------------------------------------------------------------------------
+// SDK Tool definitions — exposed via joinSession({ tools })
+// ---------------------------------------------------------------------------
+
+const VALID_CATEGORIES = ['mistake', 'pattern', 'convention', 'memory', 'preference']
+
+/**
+ * Handler for kaizen_remember tool. Saves a learning to the DB.
+ * @param {{ category: string, content: string }} args
+ * @returns {string}
+ */
+export async function handleRemember(args) {
+  if (!db) return 'Kaizen DB not available — session may not have started yet.'
+  if (!projectPath) return 'No project path — session may not have started yet.'
+
+  const { category, content } = args ?? {}
+  if (!category || !content) return 'Missing required fields: category and content.'
+  if (!VALID_CATEGORIES.includes(category)) {
+    return `Invalid category "${category}". Valid: ${VALID_CATEGORIES.join(', ')}`
+  }
+
+  upsertEntry(db, { projectPath, category, source: 'agent', content })
+
+  // Exact-match lookup for hit count (not relying on fuzzy search which may miss low-hit entries)
+  const current = db.prepare(
+    'SELECT hit_count FROM kaizen_entries WHERE project_path = ? AND category = ? AND content = ?'
+  ).get(projectPath, category, content)
+  const hitInfo = current && current.hit_count > 1 ? ` (seen ${current.hit_count}x)` : ' (new)'
+
+  let response = `✓ Saved ${category} entry${hitInfo}: "${content}"`
+
+  // Show similar entries for dedup awareness (exclude the exact match)
+  try {
+    const similar = searchEntries(db, { projectPath, query: content.split(/\s+/).slice(0, 3).join(' '), limit: 3 })
+    const others = similar.filter(e => e.content !== content)
+    if (others.length > 0) {
+      response += '\n\nSimilar existing entries:'
+      for (const e of others) {
+        response += `\n  #${e.id} [${e.category}] (${e.hit_count}x): ${e.content}`
+      }
+    }
+  } catch { /* non-critical — dedup hint is best-effort */ }
+  return response
+}
+
+/**
+ * Handler for kaizen_search tool. Queries existing learnings.
+ * @param {{ query: string, category?: string, limit?: number }} args
+ * @returns {string}
+ */
+export async function handleSearch(args) {
+  if (!db) return 'Kaizen DB not available — session may not have started yet.'
+  if (!projectPath) return 'No project path — session may not have started yet.'
+
+  const { query, category, limit: rawLimit } = args ?? {}
+  if (!query) return 'Missing required field: query.'
+  if (category && !VALID_CATEGORIES.includes(category)) {
+    return `Invalid category "${category}". Valid: ${VALID_CATEGORIES.join(', ')}`
+  }
+
+  const limit = Number.isInteger(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 100) : 10
+
+  let results
+  try {
+    results = searchEntries(db, { projectPath, query, category, limit })
+  } catch {
+    return 'Search failed — database error.'
+  }
+
+  if (results.length === 0) return `No entries found matching "${query}".`
+
+  let response = `Found ${results.length} entries:`
+  for (const e of results) {
+    const cryst = e.crystallized ? ' ★' : ''
+    response += `\n  #${e.id} [${e.category}] (${e.hit_count}x${cryst}): ${e.content}`
+  }
+  return response
+}
+
+export const TOOL_DEFINITIONS = [
+  {
+    name: 'kaizen_remember',
+    description:
+      'Save a project-specific learning to kaizen memory. Call this when: ' +
+      'the user corrects you, teaches a convention or preference, ' +
+      'or you discover a recurring pattern. ' +
+      'Do NOT save transient facts or things already in .kaizen/ files.',
+    parameters: {
+      type: 'object',
+      properties: {
+        category: {
+          type: 'string',
+          enum: VALID_CATEGORIES,
+          description:
+            'mistake = user corrected an error; convention = project rule; ' +
+            'pattern = recurring approach; memory = project fact; ' +
+            'preference = user/team preference',
+        },
+        content: {
+          type: 'string',
+          description: 'The learning to save. Be specific and actionable.',
+        },
+      },
+      required: ['category', 'content'],
+    },
+    handler: handleRemember,
+  },
+  {
+    name: 'kaizen_search',
+    description:
+      'Search existing kaizen learnings for this project. ' +
+      'Use before saving to avoid duplicates, or to recall project conventions.',
+    parameters: {
+      type: 'object',
+      properties: {
+        query: {
+          type: 'string',
+          description: 'Keyword to search for in entry content.',
+        },
+        category: {
+          type: 'string',
+          enum: VALID_CATEGORIES,
+          description: 'Optional: filter by category.',
+        },
+        limit: {
+          type: 'integer',
+          description: 'Max results (default 10).',
+        },
+      },
+      required: ['query'],
+    },
+    handler: handleSearch,
+  },
+]
+
+// ---------------------------------------------------------------------------
 // SDK integration — top-level joinSession call
 // Only runs when NOT in test mode.
 // ---------------------------------------------------------------------------
@@ -283,6 +419,7 @@ if (!process.env.__KAIZEN_TEST_MODE) {
         onPostToolUse,
         onErrorOccurred,
       },
+      tools: TOOL_DEFINITIONS,
     })
 
     session.on('session.shutdown', (event) => {

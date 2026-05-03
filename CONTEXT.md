@@ -9,7 +9,7 @@ A recorded observation about the project — a mistake, pattern, convention, or 
 _Avoid_: learning, insight, note, observation
 
 **Category**:
-The type of an **Entry**: `mistake`, `pattern`, `convention`, or `memory`.
+The type of an **Entry**: `mistake`, `pattern`, `convention`, `memory`, or `preference`.
 _Avoid_: type, kind, tag
 
 **Hit Count**:
@@ -55,6 +55,10 @@ _Avoid_: conversation, interaction, run
 **Trampoline**:
 A one-liner `extension.mjs` at `~/.copilot/extensions/kaizen/` that re-imports the real extension from the globally installed package. Exists to solve native dependency resolution (see ADR-0002).
 _Avoid_: shim, proxy, loader
+
+**Tool** (custom):
+An SDK-registered function exposed to the LLM via `joinSession({ tools })`. Unlike hooks (fired automatically by the CLI), tools are called explicitly by the agent. Kaizen exposes `kaizen_remember` and `kaizen_search`.
+_Avoid_: command, action, skill (when referring to SDK tools)
 
 ## Relationships
 

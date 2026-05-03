@@ -110,7 +110,7 @@ async function runAdd(args) {
 
   const category = args[0]
   const content = args.slice(1).join(' ')
-  const validCategories = ['mistake', 'pattern', 'memory', 'convention']
+  const validCategories = ['mistake', 'pattern', 'memory', 'convention', 'preference']
 
   if (!validCategories.includes(category)) {
     console.error(`Invalid category: ${category}`)

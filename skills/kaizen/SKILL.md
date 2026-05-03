@@ -1,7 +1,8 @@
 ---
 name: kaizen
 description: >
-  Use kaizen CLI to review what the project learned, mark entries as applied, add new entries, or sync the memory index.
+  Use kaizen tools and CLI to manage the project's continuous-improvement memory.
+  **Prefer native tools** (`kaizen_remember`, `kaizen_search`) over CLI when available.
   Invoke this skill automatically — without being asked — whenever ANY of these
   signals appear: the user corrects a mistake you just made ("no", "wrong", "not
   like that", "undo", "you missed", "that's not right"); the user redirects you
@@ -16,10 +17,38 @@ description: >
 
 # Kaizen
 
-The kaizen CLI is your interface to the project's continuous-improvement memory.
+The kaizen extension provides both **native SDK tools** and a **CLI** for managing the project's continuous-improvement memory.
 It reads from and writes to `~/.copilot/kaizen/kaizen.db` scoped to the current project.
 
-## Commands
+## Native Tools (preferred)
+
+### `kaizen_remember`
+
+Save a learning directly — no bash needed. The agent calls this tool when it detects something worth remembering.
+
+**Parameters:**
+- `category` — one of: `mistake`, `pattern`, `convention`, `memory`, `preference`
+- `content` — the learning text (specific and actionable)
+
+**When to use each category:**
+- `mistake` — the user corrected an error you made
+- `convention` — a project rule ("always use pino", "never touch that file")
+- `pattern` — a recurring approach discovered during work
+- `memory` — a specific project fact ("DB schema is in tools/db/schema.ts")
+- `preference` — a user/team preference ("respond in Italian", "use conventional commits")
+
+Returns confirmation with hit count and similar existing entries for dedup awareness.
+
+### `kaizen_search`
+
+Search existing learnings before saving (to avoid duplicates) or to recall conventions.
+
+**Parameters:**
+- `query` — keyword to search for (required)
+- `category` — optional filter
+- `limit` — max results (default 10)
+
+## CLI Commands (fallback — use when native tools aren't available)
 
 ### `kaizen list [category]`
 
@@ -42,7 +71,7 @@ ID    Cat          Hits  Cryst  Content
 ```
 
 - **ID** — integer used with `kaizen mark` to record that you acted on an entry
-- **Cat** — category (`mistake`, `pattern`, `memory`, `convention`)
+- **Cat** — category (`mistake`, `pattern`, `memory`, `convention`, `preference`)
 - **Hits** — how many times the hook has seen this pattern recur
 - **Cryst (★)** — crystallized: entry crossed the hit threshold and is in long-term memory
 - **Content** — the captured text (truncated at 50 chars)
@@ -63,7 +92,7 @@ Expected output:
 
 ### `kaizen add <category> <text>`
 
-Manually add a new kaizen entry. Valid categories: `mistake`, `pattern`, `memory`, `convention`.
+Manually add a new kaizen entry. Valid categories: `mistake`, `pattern`, `memory`, `convention`, `preference`.
 
 ```
 kaizen add convention "Always use pino for logging, never console.log"

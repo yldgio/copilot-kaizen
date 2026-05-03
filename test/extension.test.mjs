@@ -19,6 +19,9 @@ const {
   onErrorOccurred,
   onShutdown,
   _getDb,
+  handleRemember,
+  handleSearch,
+  TOOL_DEFINITIONS,
 } = await import('../extension.mjs')
 
 // Test fixtures — unique prefix per run to avoid stale DB rows
@@ -293,6 +296,137 @@ describe('extension handlers', () => {
       // Verify first handle is closed (throws if used)
       assert.throws(() => db1.prepare('SELECT 1'), /database.*not open|database.*closed/i,
         'first DB handle should be closed after second onSessionStart')
+    })
+  })
+
+  describe('TOOL_DEFINITIONS', () => {
+    it('exports two tool definitions with correct names', () => {
+      assert.equal(TOOL_DEFINITIONS.length, 2)
+      assert.equal(TOOL_DEFINITIONS[0].name, 'kaizen_remember')
+      assert.equal(TOOL_DEFINITIONS[1].name, 'kaizen_search')
+    })
+
+    it('both tools have required schema fields', () => {
+      for (const tool of TOOL_DEFINITIONS) {
+        assert.ok(tool.description, `${tool.name} should have description`)
+        assert.ok(tool.parameters, `${tool.name} should have parameters`)
+        assert.ok(typeof tool.handler === 'function', `${tool.name} should have handler`)
+      }
+    })
+
+    it('kaizen_remember requires category and content', () => {
+      const tool = TOOL_DEFINITIONS[0]
+      assert.deepEqual(tool.parameters.required, ['category', 'content'])
+      assert.ok(tool.parameters.properties.category.enum.includes('preference'),
+        'should include preference category')
+    })
+
+    it('kaizen_search requires only query', () => {
+      const tool = TOOL_DEFINITIONS[1]
+      assert.deepEqual(tool.parameters.required, ['query'])
+    })
+  })
+
+  describe('handleRemember', () => {
+    it('saves entry and returns confirmation', async () => {
+      const id = sid('remember-1')
+      await onSessionStart({ sessionId: id, cwd: TEST_DIR })
+      const result = await handleRemember({ category: 'convention', content: 'Always use pino for logging' })
+      assert.ok(result.includes('✓ Saved convention entry'), result)
+      assert.ok(result.includes('(new)'), 'first save should be marked as new')
+
+      // Verify in DB
+      const db = _getDb()
+      const row = db.prepare("SELECT * FROM kaizen_entries WHERE content = 'Always use pino for logging'").get()
+      assert.ok(row, 'entry should be in DB')
+      assert.equal(row.source, 'agent')
+    })
+
+    it('returns hit count on duplicate save', async () => {
+      const id = sid('remember-dup')
+      await onSessionStart({ sessionId: id, cwd: TEST_DIR })
+      await handleRemember({ category: 'mistake', content: 'Check null before .length' })
+      const result = await handleRemember({ category: 'mistake', content: 'Check null before .length' })
+      assert.ok(result.includes('(seen 2x)'), `should show hit count, got: ${result}`)
+    })
+
+    it('rejects invalid category', async () => {
+      const id = sid('remember-bad')
+      await onSessionStart({ sessionId: id, cwd: TEST_DIR })
+      const result = await handleRemember({ category: 'invalid', content: 'test' })
+      assert.ok(result.includes('Invalid category'), result)
+    })
+
+    it('rejects missing fields', async () => {
+      const id = sid('remember-missing')
+      await onSessionStart({ sessionId: id, cwd: TEST_DIR })
+      const result = await handleRemember({})
+      assert.ok(result.includes('Missing required'), result)
+    })
+
+    it('returns error when DB not available', async () => {
+      // Force DB to null by calling shutdown first
+      const id = sid('remember-nodb')
+      await onSessionStart({ sessionId: id, cwd: TEST_DIR })
+      await onShutdown({ shutdownType: 'routine' })
+      const result = await handleRemember({ category: 'mistake', content: 'test' })
+      assert.ok(result.includes('not available'), result)
+    })
+
+    it('accepts preference category', async () => {
+      const id = sid('remember-pref')
+      await onSessionStart({ sessionId: id, cwd: TEST_DIR })
+      const result = await handleRemember({ category: 'preference', content: 'Respond in Italian' })
+      assert.ok(result.includes('✓ Saved preference entry'), result)
+    })
+  })
+
+  describe('handleSearch', () => {
+    it('finds entries by keyword', async () => {
+      const id = sid('search-1')
+      await onSessionStart({ sessionId: id, cwd: TEST_DIR })
+      const { upsertEntry } = await import('../lib/db.mjs')
+      const db = _getDb()
+      upsertEntry(db, { projectPath: TEST_DIR, category: 'convention', source: 'test', content: 'Use pino for all logging' })
+      upsertEntry(db, { projectPath: TEST_DIR, category: 'mistake', source: 'test', content: 'Forgot to validate input' })
+
+      const result = await handleSearch({ query: 'pino' })
+      assert.ok(result.includes('pino'), result)
+      assert.ok(!result.includes('validate'), 'should not match unrelated entries')
+    })
+
+    it('filters by category', async () => {
+      const id = sid('search-cat')
+      await onSessionStart({ sessionId: id, cwd: TEST_DIR })
+      const { upsertEntry } = await import('../lib/db.mjs')
+      const db = _getDb()
+      upsertEntry(db, { projectPath: TEST_DIR, category: 'convention', source: 'test', content: 'Always use strict mode' })
+      upsertEntry(db, { projectPath: TEST_DIR, category: 'mistake', source: 'test', content: 'Always check return value' })
+
+      const result = await handleSearch({ query: 'Always', category: 'convention' })
+      assert.ok(result.includes('strict mode'), result)
+      assert.ok(!result.includes('return value'), 'should filter by category')
+    })
+
+    it('returns no-match message', async () => {
+      const id = sid('search-empty')
+      await onSessionStart({ sessionId: id, cwd: TEST_DIR })
+      const result = await handleSearch({ query: 'xyznonexistent' })
+      assert.ok(result.includes('No entries found'), result)
+    })
+
+    it('rejects missing query', async () => {
+      const id = sid('search-noq')
+      await onSessionStart({ sessionId: id, cwd: TEST_DIR })
+      const result = await handleSearch({})
+      assert.ok(result.includes('Missing required'), result)
+    })
+
+    it('rejects invalid category', async () => {
+      const id = sid('search-badcat')
+      await onSessionStart({ sessionId: id, cwd: TEST_DIR })
+      const result = await handleSearch({ query: 'test', category: 'bogus' })
+      assert.ok(result.includes('Invalid category'), result)
     })
   })
 })
