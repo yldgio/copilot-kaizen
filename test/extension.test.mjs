@@ -63,6 +63,15 @@ describe('extension handlers', () => {
       assert.ok(result.additionalContext.includes('Test Kaizen Index'), 'should contain kaizen.md content')
     })
 
+    it('injects per-category files into additionalContext', async () => {
+      fs.writeFileSync(path.join(KAIZEN_DIR, 'conventions.md'), '# Conventions\nuse camelCase\n')
+      fs.writeFileSync(path.join(KAIZEN_DIR, 'mistakes.md'), '# Mistakes\ncheck null first\n')
+      const data = { sessionId: sid('sess-cat'), cwd: TEST_DIR }
+      const result = await onSessionStart(data)
+      assert.ok(result.additionalContext.includes('use camelCase'), 'should contain conventions')
+      assert.ok(result.additionalContext.includes('check null first'), 'should contain mistakes')
+    })
+
     it('returns empty object when .kaizen/ does not exist', async () => {
       const emptyDir = path.join(os.tmpdir(), `kaizen-empty-${RUN_ID}`)
       fs.mkdirSync(emptyDir, { recursive: true })
