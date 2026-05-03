@@ -10,7 +10,6 @@
     "kaizen": "./bin/kaizen.mjs"
   },
   "exports": {
-    ".": "./kaizen.mjs",
     "./extension": "./extension.mjs",
     "./lib/db": "./lib/db.mjs",
     "./lib/inject": "./lib/inject.mjs",
@@ -19,14 +18,11 @@
     "./lib/project": "./lib/project.mjs"
   },
   "files": [
-    "kaizen.mjs",
     "extension.mjs",
     "lib/",
     "bin/",
-    "hooks/",
     "templates/",
     "skills/",
-    "hooks.json",
     "README.md",
     "LICENSE"
   ],
@@ -35,7 +31,7 @@
   },
   "devDependencies": {},
   "scripts": {
-    "test": "node --test test/",
+    "test": "node --test test/*.test.mjs",
     "lint": "echo 'no linter configured'",
     "prepublishOnly": "node -e \"import('./lib/db.mjs').then(m => { const db = m.openDb(); db.close(); console.log('DB OK') })\""
   },

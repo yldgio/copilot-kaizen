@@ -1,95 +1,297 @@
-// extension.mjs — Copilot CLI extension for copilot-kaizen
+// extension.mjs — Copilot CLI SDK extension for copilot-kaizen
 //
-// Copied to .github/extensions/kaizen/extension.mjs by `kaizen install`.
-// Injected into every Copilot CLI session at start time.
+// Loaded by the CLI runtime via trampoline at ~/.copilot/extensions/kaizen/extension.mjs
+// Top-level ESM — no activate(), no export default.
 //
-// CONSTRAINT: Self-contained. Only imports compress.mjs (zero native deps).
-//             Session-context logic is INLINED — do not import inject.mjs.
-// CONSTRAINT: Must NEVER throw. All operations in try/catch.
-// CONSTRAINT: Returns { additionalContext: string } or {}.
+// INVARIANT: Must NEVER throw. All hook bodies wrapped in try/catch.
+// INVARIANT: onPreToolUse never returns permissionDecision — kaizen injects context only.
 
 import path from 'node:path'
-import os from 'node:os'
 import fs from 'node:fs'
 import { execSync } from 'node:child_process'
 
+import {
+  openDb,
+  insertSession,
+  updateSessionEnd,
+  upsertEntry,
+  insertToolLog,
+  incrementSessionErrorCount,
+  getSessionToolCounts,
+  decayOldEntries,
+} from './lib/db.mjs'
+
+import {
+  assembleSessionContext,
+  assembleToolContext,
+} from './lib/inject.mjs'
+
+import { synthesize } from './lib/synthesize.mjs'
+import { getProjectRoot, getKaizenDir, getGlobalKaizenDir } from './lib/project.mjs'
+
 // ---------------------------------------------------------------------------
-// Inline helpers (duplicated from lib/project.mjs to avoid dependency chain)
+// Module-scoped state (extension is long-lived, single process)
 // ---------------------------------------------------------------------------
 
-/**
- * Resolve the git repository root for a given working directory.
- * Falls back to cwd itself if not inside a git repo.
- * @param {string} cwd
- * @returns {string}
- */
-function getProjectRoot(cwd) {
-  try {
-    return execSync('git rev-parse --show-toplevel', {
-      cwd,
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'ignore'],
-    }).trim()
-  } catch {
-    return cwd
-  }
+let db = null
+let sessionId = null
+let projectPath = null
+let cwd = null
+let injectedTools = new Set()
+
+// ---------------------------------------------------------------------------
+// Kill-switch
+// ---------------------------------------------------------------------------
+
+function isSkipped() {
+  return process.env.SKIP_KAIZEN === '1'
 }
 
 // ---------------------------------------------------------------------------
-// Extension export: onSessionStart
+// Exported hook handlers (testable without SDK)
 // ---------------------------------------------------------------------------
 
 /**
- * Called by Copilot CLI when a session starts.
- * Reads kaizen memory files and returns them as additionalContext.
- *
- * Resolution order:
- *   1. <projectRoot>/.kaizen/kaizen.md   (index)
- *   2. <projectRoot>/.kaizen/general.md  (conventions)
- *   3. If neither exists: ~/.copilot/kaizen/kaizen.md (global fallback)
- *
- * @param {object} [event] — the session-start event from Copilot CLI
- * @returns {Promise<{ additionalContext?: string }>}
+ * @param {object} data — StartData from SDK: { sessionId, cwd, copilotVersion, ... }
+ * @returns {{ additionalContext?: string } | {}}
  */
-export async function onSessionStart(event) {
+export async function onSessionStart(data) {
+  if (isSkipped()) return {}
   try {
-    const { compressText } = await import('./lib/compress.mjs')
-    const cwd = event?.cwd ?? process.cwd()
-    const projectRoot = getProjectRoot(cwd)
-    const kaizenDir = path.join(projectRoot, '.kaizen')
-    const globalDir = path.join(os.homedir(), '.copilot', 'kaizen')
+    cwd = path.resolve(data?.cwd ?? process.cwd())
+    projectPath = getProjectRoot(cwd)
+    sessionId = data?.sessionId ?? `kaizen_${Date.now()}_${process.pid}`
+    injectedTools = new Set()
 
-    const parts = []
+    // Open DB
+    db = openDb()
 
-    // Project-local kaizen files
-    const kaizenMd = path.join(kaizenDir, 'kaizen.md')
-    const generalMd = path.join(kaizenDir, 'general.md')
-
-    if (fs.existsSync(kaizenMd)) {
-      parts.push(fs.readFileSync(kaizenMd, 'utf8'))
-    }
-    if (fs.existsSync(generalMd)) {
-      parts.push(fs.readFileSync(generalMd, 'utf8'))
-    }
-
-    // Global fallback — only if no project-local files found
-    if (parts.length === 0) {
-      const globalKaizenMd = path.join(globalDir, 'kaizen.md')
-      if (fs.existsSync(globalKaizenMd)) {
-        parts.push(fs.readFileSync(globalKaizenMd, 'utf8'))
-      }
+    // Derive repo name
+    let repo
+    try {
+      const remoteUrl = execSync('git remote get-url origin', {
+        cwd,
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'ignore'],
+      }).trim()
+      repo = path.basename(remoteUrl, '.git')
+    } catch {
+      repo = path.basename(cwd)
     }
 
-    // Nothing found — return empty object
-    if (parts.length === 0) return {}
+    // Insert session record
+    insertSession(db, {
+      sessionId,
+      projectPath,
+      repo,
+      source: data?.source ?? 'new',
+    })
 
-    // Assemble and compress
-    const assembled = parts.join('\n\n---\n\n')
-    const compressed = compressText(assembled, 8000)
+    // Inject session-level context only if .kaizen/ exists
+    const kaizenDir = getKaizenDir(projectPath)
+    if (!fs.existsSync(kaizenDir)) return {}
 
-    return { additionalContext: compressed }
+    const context = assembleSessionContext({
+      projectRoot: projectPath,
+      globalKaizenDir: getGlobalKaizenDir(),
+    })
+
+    if (!context) return {}
+    return { additionalContext: context }
   } catch {
-    // CONSTRAINT: Must NEVER throw — return empty object on any error
     return {}
   }
 }
+
+/**
+ * @param {object} data — { sessionId, timestamp, cwd, toolName, toolArgs (JSON string) }
+ * @returns {{ additionalContext?: string } | {}}
+ */
+export async function onPreToolUse(data) {
+  if (isSkipped()) return {}
+  try {
+    const toolName = data?.toolName ?? 'unknown'
+
+    // DB log (fire-and-forget)
+    if (db) {
+      try {
+        insertToolLog(db, { sessionId, projectPath, toolName, eventType: 'pre' })
+      } catch { /* swallow */ }
+    }
+
+    // Injection guard: once per tool per session
+    if (injectedTools.has(toolName)) return {}
+
+    // Check if .kaizen/ exists for injection
+    const kaizenDir = getKaizenDir(projectPath)
+    if (!fs.existsSync(kaizenDir)) return {}
+
+    const context = assembleToolContext({
+      toolName,
+      projectRoot: projectPath,
+      globalKaizenDir: getGlobalKaizenDir(),
+    })
+
+    if (!context) return {}
+
+    injectedTools.add(toolName)
+    return { additionalContext: context }
+  } catch {
+    return {}
+  }
+}
+
+/**
+ * @param {object} data — { sessionId, timestamp, cwd, toolName, toolArgs (object), toolResult: { resultType, textResultForLlm } }
+ */
+export async function onPostToolUse(data) {
+  if (isSkipped()) return
+  try {
+    const toolName = data?.toolName ?? 'unknown'
+    const resultType = data?.toolResult?.resultType ?? 'unknown'
+    const eventTypeMap = {
+      success: 'post:success',
+      failure: 'post:failure',
+      denied: 'post:denied',
+    }
+    const eventType = eventTypeMap[resultType] ?? 'post:unknown'
+
+    if (db) {
+      insertToolLog(db, { sessionId, projectPath, toolName, eventType })
+    }
+  } catch { /* swallow */ }
+}
+
+/**
+ * @param {object} data — { error: string | { name, message }, ... }
+ */
+export async function onErrorOccurred(data) {
+  if (isSkipped()) return
+  try {
+    const error = data?.error
+    let content
+    if (typeof error === 'string') {
+      content = error
+    } else {
+      const errorName = error?.name ?? 'Error'
+      const errorMessage = error?.message ?? 'unknown'
+      content = `[${errorName}] ${errorMessage}`
+    }
+
+    if (db) {
+      upsertEntry(db, {
+        projectPath,
+        category: 'mistake',
+        source: 'auto',
+        content,
+      })
+      incrementSessionErrorCount(db, sessionId)
+    }
+  } catch { /* swallow */ }
+}
+
+/**
+ * Called from session.on("session.shutdown") event handler.
+ * @param {object} data — ShutdownData: { shutdownType, totalPremiumRequests, ... }
+ */
+export async function onShutdown(data) {
+  if (isSkipped()) return
+  try {
+    if (!db) return
+
+    const shutdownType = data?.shutdownType ?? 'routine'
+
+    // Aggregate tool counts
+    const { toolCount, failureCount } = getSessionToolCounts(db, sessionId)
+
+    // Extract tool-failure insights
+    try {
+      const failedTools = db.prepare(`
+        SELECT tool_name, COUNT(*) as n
+          FROM kaizen_tool_log
+         WHERE session_id = ?
+           AND event_type = 'post:failure'
+         GROUP BY tool_name
+        HAVING n >= 3
+      `).all(sessionId)
+
+      for (const row of failedTools) {
+        upsertEntry(db, {
+          projectPath,
+          category: 'pattern',
+          source: 'auto',
+          content: `Tool ${row.tool_name} failed ${row.n} times in a single session`,
+        })
+      }
+    } catch { /* non-critical */ }
+
+    // Synthesis (skip on error shutdowns)
+    if (shutdownType !== 'error') {
+      try {
+        const kaizenDir = getKaizenDir(projectPath)
+        if (fs.existsSync(kaizenDir)) {
+          synthesize({
+            db,
+            projectPath,
+            kaizenDir,
+            globalKaizenDir: getGlobalKaizenDir(),
+          })
+        }
+      } catch { /* synthesis failure must not propagate */ }
+    }
+
+    // Decay old entries
+    try {
+      decayOldEntries(db, projectPath)
+    } catch { /* non-critical */ }
+
+    // Close session record
+    updateSessionEnd(db, {
+      sessionId,
+      endReason: shutdownType,
+      toolCount,
+      failureCount,
+      errorCount: 0, // already tracked incrementally
+    })
+
+    // Close DB
+    db.close()
+    db = null
+  } catch { /* swallow */ }
+}
+
+// ---------------------------------------------------------------------------
+// Test helper — expose DB for test assertions
+// ---------------------------------------------------------------------------
+
+export function _getDb() {
+  return db
+}
+
+// ---------------------------------------------------------------------------
+// SDK integration — top-level joinSession call
+// Only runs when NOT in test mode.
+// ---------------------------------------------------------------------------
+
+if (!process.env.__KAIZEN_TEST_MODE) {
+  try {
+    const { joinSession } = await import('@github/copilot-sdk/extension')
+
+    const session = await joinSession({
+      hooks: {
+        onSessionStart,
+        onPreToolUse,
+        onPostToolUse,
+        onErrorOccurred,
+      },
+    })
+
+    session.on('session.shutdown', (event) => {
+      onShutdown(event?.data ?? event)
+    })
+  } catch (e) {
+    // Extension load failure must not crash the CLI
+    // This happens in dev environments where SDK isn't installed
+  }
+}
+

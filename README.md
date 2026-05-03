@@ -2,10 +2,10 @@
 
 > Continuous-improvement memory layer for GitHub Copilot CLI
 
-copilot-kaizen is a hook-based addon that gives Copilot CLI a **learning loop**.
-It records tool usage, mistakes, and patterns during your sessions, then
-synthesizes them into `.kaizen/` markdown files that are automatically injected
-as context in future sessions.
+copilot-kaizen is a Copilot CLI **extension** that gives your sessions a **learning loop**.
+It records tool usage, mistakes, and patterns during sessions, then synthesizes
+them into `.kaizen/` markdown files that are automatically injected as context
+in future sessions via `additionalContext`.
 
 The result: Copilot gets smarter about your project over time — it remembers
 your conventions, your common mistakes, and your tool preferences.
@@ -16,25 +16,21 @@ your conventions, your common mistakes, and your tool preferences.
 
 ```
 ┌──────────────────────────────────────────────────────────┐
-│                     Copilot CLI Session                   │
+│                   Copilot CLI Session                     │
 │                                                          │
-│  sessionStart ──► kaizen hook ──► Insert session record   │
+│  onSessionStart ──► Inject .kaizen/ context (broad)     │
+│                     Insert session record                │
 │                                                          │
-│  preToolUse ───► kaizen hook ──► Inject .kaizen/ context │
-│                        │          into additionalContext  │
-│                        ▼                                 │
-│                   stdout: JSON { permissionDecision,     │
-│                                  additionalContext }     │
+│  onPreToolUse ───► Inject .kaizen/tools/<tool>.md       │
+│                    (deduped: once per tool per session)  │
+│                    Log tool invocation                   │
 │                                                          │
-│  postToolUse ──► kaizen hook ──► Log success/failure     │
+│  onPostToolUse ──► Log success/failure                  │
 │                                                          │
-│  errorOccurred ► kaizen hook ──► Record mistake entry    │
+│  onErrorOccurred ► Record mistake entry                 │
 │                                                          │
-│  sessionEnd ───► kaizen hook ──► Synthesize learnings    │
-│                        │          into .kaizen/*.md      │
-│                        ▼                                 │
-│                   Update auto-blocks, rebuild index,     │
-│                   decay old entries                       │
+│  session.shutdown ► Synthesize learnings into .kaizen/  │
+│                     Decay old entries, update stats      │
 └──────────────────────────────────────────────────────────┘
 ```
 
@@ -42,55 +38,17 @@ your conventions, your common mistakes, and your tool preferences.
 
 ## Quick Install
 
-**Unix / macOS:**
-
 ```bash
-curl -fsSL https://raw.githubusercontent.com/yldgio/copilot-kaizen/main/install.sh | bash
+# Clone and install globally
+git clone https://github.com/yldgio/copilot-kaizen.git
+cd copilot-kaizen && npm install && npm link
+
+# Set up in your project
+cd your-project
+kaizen install .
 ```
 
-**Windows (PowerShell):**
-
-```powershell
-irm https://raw.githubusercontent.com/yldgio/copilot-kaizen/main/install.ps1 | iex
-```
-
-> **Prerequisites:** Node.js 18+ and npm must be installed. Run from your project root to
-> install kaizen globally and set it up in the current project automatically.
-
----
-
-## Installing from GitHub Packages
-
-This package is published to GitHub Packages as `@yldgio/copilot-kaizen`.
-
-### Prerequisites
-
-Create a `.npmrc` file in your project (or in `~/.npmrc` for global installs):
-
-```
-@yldgio:registry=https://npm.pkg.github.com
-//npm.pkg.github.com/:_authToken=YOUR_GITHUB_TOKEN
-```
-
-You need a GitHub Personal Access Token with `read:packages` scope.
-
-### Install
-
-```bash
-npm install -g @yldgio/copilot-kaizen
-```
-
-Then run `kaizen install` in your project root as usual.
-
-## Releasing a New Version
-
-Releases are automated via [release-please](https://github.com/googleapis/release-please).
-
-1. Push commits to `main` using [Conventional Commits](https://www.conventionalcommits.org/) (`feat:`, `fix:`, `chore:`, etc.)
-2. release-please opens a **Release PR** automatically with updated `CHANGELOG.md` and bumped version
-3. Merge the PR when ready to release
-4. release-please creates the GitHub Release + git tag via GitHub API
-5. The publish workflow runs automatically → package published to GitHub Packages
+> **Prerequisites:** Node.js 18+ and npm.
 
 ---
 
@@ -99,26 +57,14 @@ Releases are automated via [release-please](https://github.com/googleapis/releas
 ### Step 1: Install globally
 
 ```bash
-npm install -g copilot-kaizen
+npm install -g @yldgio/copilot-kaizen
 ```
-
-Or with your preferred package manager:
-
-```bash
-pnpm add -g copilot-kaizen
-yarn global add copilot-kaizen
-bun install -g copilot-kaizen
-```
-
-> ⚠️ **npx is NOT supported at runtime.** The `preToolUse` hook has a 2-second
-> timeout and `npx` cold-start takes longer. You must install globally so the
-> `kaizen` binary is on your PATH.
 
 ### Step 2: Set up a project
 
 ```bash
 cd your-project
-kaizen install
+kaizen install .
 ```
 
 This creates:
@@ -129,23 +75,18 @@ This creates:
 | `.kaizen/general.md` | General conventions (human-editable) |
 | `.kaizen/tools/` | Per-tool guidance files |
 | `.kaizen/domain/` | Domain knowledge files |
-| `.github/hooks/kaizen.json` | Hook configuration for Copilot CLI |
-| `.github/hooks/kaizen/` | Hook wrapper scripts (gitignored) |
-| `.github/extensions/kaizen/` | Copilot CLI extension (gitignored) |
-| `.agents/skills/kaizen/` | Copilot CLI skill — teaches the agent available kaizen commands |
+| `~/.copilot/extensions/kaizen/` | Extension trampoline (auto-managed) |
+| `.agents/skills/kaizen/` | Copilot CLI skill |
 
-### Step 3: Commit `.kaizen/` and `.agents/skills/kaizen/` to your repo
+### Step 3: Commit `.kaizen/` and `.agents/skills/kaizen/`
 
 ```bash
 git add .kaizen/ .agents/skills/kaizen/
 git commit -m "chore: add kaizen memory directory and skill"
 ```
 
-The hook wrappers and extension are auto-gitignored — only `.kaizen/` and
-`.agents/skills/kaizen/` need to be committed. The skill file teaches Copilot
-about available kaizen commands and is safe to commit. Team members who also
-install `copilot-kaizen` globally will automatically get your project's kaizen
-context.
+The extension trampoline lives in your home directory — nothing project-local
+needs to be gitignored.
 
 ---
 
@@ -154,7 +95,8 @@ context.
 | Command | Description |
 |---------|-------------|
 | `kaizen install [dir]` | Set up kaizen in a project directory |
-| `kaizen update [dir]` | Force-update kaizen files (hooks, extension, skills) — safe: never overwrites user config or memory files |
+| `kaizen update [dir]` | Force-update trampoline and skills |
+| `kaizen uninstall` | Remove the extension (preserves .kaizen/ and DB) |
 | `kaizen add <category> <text>` | Manually add a kaizen entry |
 | `kaizen list [category]` | List entries for this project |
 | `kaizen mark <id>` | Mark an entry as applied |
@@ -173,19 +115,10 @@ context.
 ### Examples
 
 ```bash
-# Add a convention
 kaizen add convention "Always use pino for logging, never console.log"
-
-# Add a mistake you want the AI to learn from
 kaizen add mistake "Forgot to check null before accessing .length"
-
-# List all patterns
 kaizen list pattern
-
-# Mark an entry as applied (entry ID from `kaizen list`)
 kaizen mark 42
-
-# Force a synthesis run (normally happens at session end)
 kaizen sync
 ```
 
@@ -211,14 +144,12 @@ kaizen sync
 ### Human vs Auto content
 
 Each `.md` file can contain both human-authored and auto-generated content.
-The auto-generated content is enclosed in markers:
+Auto-generated content is enclosed in markers:
 
 ```markdown
 # General
 
-Use pino for logging. (← human-authored, never touched)
-
-Always validate inputs. (← human-authored)
+Use pino for logging.
 
 <!-- kaizen:auto -->
 ## Auto-generated (last synthesis)
@@ -228,8 +159,49 @@ Always validate inputs. (← human-authored)
 <!-- /kaizen:auto -->
 ```
 
-**kaizen never modifies content outside the auto-block markers.** Your
-hand-written conventions are always safe.
+**kaizen never modifies content outside the auto-block markers.**
+
+---
+
+## Architecture
+
+```
+copilot-kaizen/
+├── package.json              Package manifest
+├── extension.mjs             SDK extension (joinSession + hooks)
+├── lib/
+│   ├── db.mjs                SQLite database layer (better-sqlite3)
+│   ├── inject.mjs            Context assembly for injection
+│   ├── synthesize.mjs        Session-end synthesis engine
+│   ├── compress.mjs          Text compression for context budgets
+│   └── project.mjs           Project path utilities
+├── bin/
+│   ├── kaizen.mjs            CLI entry point
+│   └── install.mjs           Installer (writes trampoline)
+├── templates/
+│   ├── kaizen.md.tmpl        Template for .kaizen/kaizen.md
+│   └── general.md.tmpl       Template for .kaizen/general.md
+├── skills/kaizen/            Copilot skill definition
+├── test/                     Test suite
+└── docs/adr/                 Architectural Decision Records
+```
+
+### Extension loading
+
+The installer writes a **trampoline** at `~/.copilot/extensions/kaizen/extension.mjs`:
+
+```js
+await import("/absolute/path/to/copilot-kaizen/extension.mjs");
+```
+
+This ensures `better-sqlite3` (a native dependency) resolves from the package's
+own `node_modules/`, not from the CLI's extension sandbox.
+
+### Dependencies
+
+- **Runtime:** `better-sqlite3` (single native dependency)
+- **Node.js:** >=18 (ESM modules)
+- **No other runtime deps.**
 
 ---
 
@@ -241,8 +213,7 @@ kaizen stores session data and entries in a SQLite database at:
 ~/.copilot/kaizen/kaizen.db
 ```
 
-This is a user-global database with a `project_path` column for per-project
-isolation. All projects share one DB file.
+User-global, with `project_path` column for per-project isolation.
 
 ### Tables
 
@@ -254,92 +225,13 @@ isolation. All projects share one DB file.
 
 ---
 
-## How hooks work
-
-When Copilot CLI fires a hook event:
-
-1. Copilot CLI reads `.github/hooks/kaizen.json`
-2. Runs the appropriate wrapper script (`.github/hooks/kaizen/kaizen.sh` or `.ps1`)
-3. The wrapper script pipes stdin to `kaizen hook <event>`
-4. `kaizen hook` dispatches to the correct handler in `kaizen.mjs`
-5. For `preToolUse`: returns JSON to stdout with `permissionDecision` and optional `additionalContext`
-6. For all other events: no stdout, side effects only (DB writes, synthesis)
-
-### Timeouts
-
-| Event | Timeout | Why |
-|-------|---------|-----|
-| `preToolUse` | 2s | On the critical path — must be fast |
-| `postToolUse` | 5s | Simple DB insert |
-| `errorOccurred` | 5s | Simple DB insert |
-| `sessionStart` | 10s | DB insert + tmp file write |
-| `sessionEnd` | 30s | Synthesis + decay + cleanup |
-
-### Safety guarantees
-
-- **Crash-to-success:** If kaizen crashes, it exits with code 0. Copilot CLI
-  is never blocked.
-- **Kill-switch:** Set `SKIP_KAIZEN=1` in your environment to disable all hooks.
-- **No stdout pollution:** Only `preToolUse` produces stdout (valid JSON).
-  All other hooks are silent.
-
----
-
-## Architecture
-
-```
-copilot-kaizen/
-├── package.json              Package manifest
-├── hooks.json                Template for .github/hooks/kaizen.json
-├── kaizen.mjs                Hook dispatcher (core engine)
-├── extension.mjs             Copilot CLI extension (onSessionStart)
-├── lib/
-│   ├── db.mjs                SQLite database layer (better-sqlite3)
-│   ├── inject.mjs            Context assembly for hook injection
-│   ├── synthesize.mjs        Session-end synthesis engine
-│   ├── compress.mjs          Text compression for context budgets
-│   └── project.mjs           Project path utilities
-├── bin/
-│   ├── kaizen.mjs            CLI entry point
-│   └── install.mjs           Project installer
-├── hooks/
-│   ├── kaizen.sh             Unix hook wrapper (static)
-│   └── kaizen.ps1            Windows hook wrapper (static)
-└── templates/
-    ├── kaizen.md.tmpl        Template for .kaizen/kaizen.md
-    └── general.md.tmpl       Template for .kaizen/general.md
-```
-
-### Dependencies
-
-- **Runtime:** `better-sqlite3` (single native dependency)
-- **Node.js:** >=18 (ESM modules)
-- **No other runtime deps.** No frameworks, no HTTP servers, no transpilers.
-
----
-
 ## Troubleshooting
 
-### "kaizen: command not found"
+### Extension not loading
 
-The `kaizen` binary is not on your PATH. Re-install globally:
-
-```bash
-npm install -g copilot-kaizen
-```
-
-Verify:
-
-```bash
-which kaizen    # Unix
-where kaizen    # Windows
-```
-
-### Hooks not firing
-
-1. Check `.github/hooks/kaizen.json` exists and is valid JSON
-2. Check `.github/hooks/kaizen/kaizen.sh` exists and is executable
-3. Run `kaizen hook sessionStart <<< '{"cwd":"."}'` manually to test
+1. Check trampoline exists: `cat ~/.copilot/extensions/kaizen/extension.mjs`
+2. Verify it points to the correct path
+3. Re-run `kaizen install .` to regenerate
 
 ### Disable kaizen temporarily
 
@@ -360,6 +252,13 @@ kaizen install .    # re-creates the DB
 
 ```bash
 sqlite3 ~/.copilot/kaizen/kaizen.db "SELECT * FROM kaizen_entries ORDER BY hit_count DESC LIMIT 20"
+```
+
+### Uninstall
+
+```bash
+kaizen uninstall     # removes extension trampoline
+# Optionally: rm -rf ~/.copilot/kaizen/  (removes DB)
 ```
 
 ---

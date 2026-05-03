@@ -4,15 +4,13 @@
 //
 // Commands:
 //   kaizen install [dir]  — Set up kaizen in a project directory
-//   kaizen update [dir]   — Force-update kaizen files (hooks, extension, skills)
-//   kaizen hook <event>   — Dispatch a hook event (reads stdin JSON)
+//   kaizen update [dir]   — Force-update kaizen files (trampoline, skills)
+//   kaizen uninstall      — Remove the extension trampoline
 //   kaizen add <category> <content>  — Manually add a kaizen entry
 //   kaizen list [category]           — List kaizen entries
 //   kaizen mark <id>                 — Mark an entry as applied
 //   kaizen sync                      — Force synthesis + index rebuild
 //   kaizen reorganize                — Rebuild the kaizen.md index
-//
-// INVARIANT: crash-to-success for hook command (never block Copilot CLI)
 
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
@@ -33,8 +31,8 @@ async function main() {
       await runUpdate(args)
       break
 
-    case 'hook':
-      await runHook(args)
+    case 'uninstall':
+      await runUninstall()
       break
 
     case 'add':
@@ -91,71 +89,12 @@ async function runUpdate(args) {
 }
 
 // ---------------------------------------------------------------------------
-// Command: hook <event>
+// Command: uninstall
 // ---------------------------------------------------------------------------
 
-async function runHook(args) {
-  // Crash-to-success for hook dispatch — MUST wrap everything
-  process.on('uncaughtException', () => process.exit(0))
-  process.on('unhandledRejection', () => process.exit(0))
-
-  if (process.env.SKIP_KAIZEN === '1') process.exit(0)
-
-  const eventName = args[0]
-  if (!eventName) process.exit(0)
-
-  try {
-    // Read stdin
-    const stdinData = await readStdin()
-    const { dispatch } = await import('../kaizen.mjs')
-    await dispatch(eventName, stdinData)
-  } catch {
-    // Crash-to-success
-  }
-  process.exit(0)
-}
-
-/**
- * Read all of stdin into a string.
- * @returns {Promise<string>}
- */
-function readStdin() {
-  return new Promise((resolve, reject) => {
-    const chunks = []
-    let settled = false
-
-    const cleanup = () => {
-      process.stdin.removeListener('data', onData)
-      process.stdin.removeListener('end', onEnd)
-      process.stdin.removeListener('error', onError)
-    }
-
-    const onData = chunk => chunks.push(chunk)
-    const onEnd = () => {
-      if (settled) return
-      settled = true
-      cleanup()
-      resolve(Buffer.concat(chunks).toString('utf8'))
-    }
-    const onError = err => {
-      if (settled) return
-      settled = true
-      cleanup()
-      reject(err)
-    }
-
-    process.stdin.on('data', onData)
-    process.stdin.on('end', onEnd)
-    process.stdin.on('error', onError)
-
-    // Safety timeout: if stdin doesn't close in 5s, resolve with what we have
-    setTimeout(() => {
-      if (settled) return
-      settled = true
-      cleanup()
-      resolve(Buffer.concat(chunks).toString('utf8'))
-    }, 5000)
-  })
+async function runUninstall() {
+  const { uninstall } = await import('./install.mjs')
+  await uninstall()
 }
 
 // ---------------------------------------------------------------------------
@@ -319,12 +258,12 @@ async function runReorganize() {
 
 function printHelp() {
   console.log(`
-copilot-kaizen v2 — Continuous-improvement memory for Copilot CLI
+copilot-kaizen — Continuous-improvement memory for Copilot CLI
 
 USAGE:
   kaizen install [dir]          Set up kaizen in a project directory
-  kaizen update [dir]           Force-update all kaizen files (hooks, extension, skills)
-  kaizen hook <event>           Dispatch a hook event (internal — called by wrappers)
+  kaizen update [dir]           Force-update trampoline and skills
+  kaizen uninstall              Remove the extension (preserves .kaizen/ and DB)
   kaizen add <category> <text>  Manually add a kaizen entry
   kaizen list [category]        List kaizen entries for this project
   kaizen mark <id>              Mark an entry as applied
@@ -340,6 +279,7 @@ CATEGORIES:
 EXAMPLES:
   kaizen install .
   kaizen update .
+  kaizen uninstall
   kaizen add mistake "Forgot to handle null in auth middleware"
   kaizen add convention "Always use pino for logging"
   kaizen list mistake
