@@ -72,7 +72,7 @@ ID    Cat          Hits  Cryst  Content
 
 - **ID** — integer used with `kaizen mark` to record that you acted on an entry
 - **Cat** — category (`mistake`, `pattern`, `memory`, `convention`, `preference`)
-- **Hits** — how many times the hook has seen this pattern recur
+- **Hits** — how many times this pattern has been independently observed
 - **Cryst (★)** — crystallized: entry crossed the hit threshold and is in long-term memory
 - **Content** — the captured text (truncated at 50 chars)
 

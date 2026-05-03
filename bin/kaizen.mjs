@@ -130,30 +130,13 @@ async function runAdd(args) {
 async function runList(args) {
   const category = args[0] || null
 
-  const { openDb } = await import('../lib/db.mjs')
+  const { openDb, listEntries } = await import('../lib/db.mjs')
   const { getProjectRoot } = await import('../lib/project.mjs')
 
   const db = openDb()
   const projectPath = getProjectRoot(process.cwd())
 
-  let rows
-  if (category) {
-    rows = db.prepare(`
-      SELECT id, category, content, hit_count, last_seen, crystallized, applied_count
-        FROM kaizen_entries
-       WHERE project_path = ? AND category = ?
-       ORDER BY hit_count DESC, last_seen DESC
-       LIMIT 50
-    `).all(projectPath, category)
-  } else {
-    rows = db.prepare(`
-      SELECT id, category, content, hit_count, last_seen, crystallized, applied_count
-        FROM kaizen_entries
-       WHERE project_path = ?
-       ORDER BY hit_count DESC, last_seen DESC
-       LIMIT 50
-    `).all(projectPath)
-  }
+  const rows = listEntries(db, { projectPath, category, limit: 50 })
 
   db.close()
 
@@ -185,19 +168,14 @@ async function runMark(args) {
     process.exit(1)
   }
 
-  const { openDb } = await import('../lib/db.mjs')
+  const { openDb, markEntryApplied } = await import('../lib/db.mjs')
   const db = openDb()
 
-  const result = db.prepare(`
-    UPDATE kaizen_entries
-       SET applied_count = applied_count + 1,
-           last_applied_at = datetime('now')
-     WHERE id = ?
-  `).run(id)
+  const changes = markEntryApplied(db, id)
 
   db.close()
 
-  if (result.changes === 0) {
+  if (changes === 0) {
     console.error(`Entry ${id} not found.`)
     process.exit(1)
   }

@@ -138,13 +138,13 @@ describe('kaizen core', () => {
 
     it('accepts any category', () => {
       upsertEntry(db, { projectPath: TEST_DIR, category: 'custom-cat', source: 'agent', content: 'custom entry' })
-      const row = db.prepare("SELECT * FROM kaizen_entries WHERE category = 'custom-cat'").get()
+      const row = queryRow(db, "SELECT * FROM kaizen_entries WHERE category = 'custom-cat'", [])
       assert.ok(row)
     })
 
     it('accepts preference category', () => {
       upsertEntry(db, { projectPath: TEST_DIR, category: 'preference', source: 'agent', content: 'Respond in Italian' })
-      const row = db.prepare("SELECT * FROM kaizen_entries WHERE category = 'preference'").get()
+      const row = queryRow(db, "SELECT * FROM kaizen_entries WHERE category = 'preference'", [])
       assert.ok(row)
     })
   })
