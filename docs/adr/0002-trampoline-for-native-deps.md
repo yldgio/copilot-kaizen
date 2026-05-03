@@ -1,5 +1,7 @@
 # Trampoline pattern for native dependencies
 
+**Status: Superseded by [ADR-0003](0003-sqljs-replaces-better-sqlite3.md)** — native dependencies eliminated. The trampoline pattern remains for ESM path resolution.
+
 Copilot CLI loads extensions from `~/.copilot/extensions/<name>/extension.mjs`. That file runs in the CLI's own Node process, which cannot resolve `better-sqlite3` (a native addon) unless it's in the extension directory's `node_modules/`. Rather than duplicating or bundling native binaries, the installer writes a one-liner trampoline at the extension path that re-imports the real extension from the globally installed npm package:
 
 ```js

@@ -53,7 +53,7 @@ A Copilot CLI session from start to shutdown. Tracked in `kaizen_sessions` with 
 _Avoid_: conversation, interaction, run
 
 **Trampoline**:
-A one-liner `extension.mjs` at `~/.copilot/extensions/kaizen/` that re-imports the real extension from the globally installed package. Exists to solve native dependency resolution (see ADR-0002).
+A one-liner `extension.mjs` at `~/.copilot/extensions/kaizen/` that re-imports the real extension from the globally installed package. Required for ESM path resolution — without it, relative imports in the real `extension.mjs` (e.g., `./lib/db.mjs`) wouldn't resolve (see ADR-0002, superseded by ADR-0003).
 _Avoid_: shim, proxy, loader
 
 **Tool** (custom):

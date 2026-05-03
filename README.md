@@ -199,7 +199,7 @@ copilot-kaizen/
 ├── package.json              Package manifest
 ├── extension.mjs             SDK extension (joinSession + hooks)
 ├── lib/
-│   ├── db.mjs                SQLite database layer (better-sqlite3)
+│   ├── db.mjs                SQLite database layer (sql.js / WASM)
 │   ├── inject.mjs            Context assembly for injection
 │   ├── synthesize.mjs        Session-end synthesis engine
 │   ├── compress.mjs          Text compression for context budgets
@@ -224,13 +224,13 @@ await import("file:///absolute/path/to/copilot-kaizen/extension.mjs");
 ```
 
 The `file:///` URL scheme is required for ESM `import()` on Windows (bare paths
-fail with `ERR_UNSUPPORTED_ESM_URL_SCHEME`). This ensures `better-sqlite3`
-(a native dependency) resolves from the package's own `node_modules/`, not from
+fail with `ERR_UNSUPPORTED_ESM_URL_SCHEME`). This ensures relative imports
+(e.g., `./lib/db.mjs`) resolve from the package's own directory, not from
 the CLI's extension sandbox.
 
 ### Dependencies
 
-- **Runtime:** `better-sqlite3` (single native dependency)
+- **Runtime:** `sql.js` (pure JavaScript/WASM SQLite — no native compilation)
 - **Node.js:** >=18 (ESM modules)
 - **No other runtime deps.**
 

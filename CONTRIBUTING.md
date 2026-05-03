@@ -51,18 +51,16 @@ PowerShell equivalent:
 ## Pull Request Guidelines
 
 1. **One concern per PR.** Keep changes focused.
-2. **Test on both platforms.** If you change hook logic, verify `hooks/kaizen.sh` and `hooks/kaizen.ps1` stay in sync.
+2. **Test changes.** Run `npm test` before submitting.
 3. **Update CHANGELOG.md.** Add an entry under `[Unreleased]`.
-4. **Keep preToolUse fast.** It has a 2s timeout. All DB writes use synchronous `better-sqlite3` — only preToolUse uses `setImmediate` to defer its write off the critical path.
-5. **Exit 0 on failure.** Hooks must never block or crash the agent.
+4. **Keep preToolUse fast.** It has a 2s timeout. All DB writes use synchronous sql.js — only preToolUse uses `setImmediate` to defer its write off the critical path.
+5. **Fail silently.** Extension handlers must never block or crash the agent.
 
 ---
 
 ## Code Style
 
 - JavaScript (`.mjs`): ESM modules, async/await, JSDoc on exported functions
-- Shell wrappers (`hooks/kaizen.sh`): POSIX sh, errors suppressed via `2>/dev/null || true`
-- PowerShell wrappers (`hooks/kaizen.ps1`): `$ErrorActionPreference` not set (try/catch used instead)
 - SQL: uppercase keywords, one clause per line
 - Comments only where intent is non-obvious
 

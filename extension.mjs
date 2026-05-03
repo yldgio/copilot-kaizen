@@ -140,6 +140,7 @@ async function onErrorOccurred(data) {
   } catch (e) {
     await session.log(`[kaizen] onErrorOccurred error: ${e.message}`, { level: 'error' })
   }
+}
 
 async function onShutdown(data) {
   if (isSkipped()) return
