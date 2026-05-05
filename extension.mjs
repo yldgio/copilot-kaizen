@@ -99,6 +99,15 @@ async function onPreToolUse(data) {
 
     if (injectedTools.has(toolName)) return {}
 
+    // Guard: projectPath is null after hot-reload (onSessionStart not re-called).
+    // Lazy-init from cwd so the extension recovers without a full session restart.
+    if (!projectPath) {
+      try {
+        projectPath = getProjectRoot(path.resolve(process.cwd()))
+      } catch { return {} }
+      if (!projectPath) return {}
+    }
+
     const kaizenDir = getKaizenDir(projectPath)
     if (!fs.existsSync(kaizenDir)) return {}
 
