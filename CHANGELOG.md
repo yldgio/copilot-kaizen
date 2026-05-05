@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.0.0](https://github.com/yldgio/copilot-kaizen/compare/v1.1.0...v2.0.0) (2026-05-05)
+
+
+### ⚠ BREAKING CHANGES
+
+* new 'preference' category added to kaizen entries
+* Removes hooks.json, kaizen.mjs, and hooks/ directory. The extension now uses joinSession() from @github/copilot-sdk/extension with a trampoline at ~/.copilot/extensions/kaizen/extension.mjs.
+
+### Features
+
+* add kaizen_remember and kaizen_search SDK tools ([b74525d](https://github.com/yldgio/copilot-kaizen/commit/b74525d8439c9cd7606753f5d03691dbd74d2eb7))
+* inject all .kaizen/*.md files at session start ([f16972d](https://github.com/yldgio/copilot-kaizen/commit/f16972d75e5d294d24c8bdda83be2ee6d44703f9))
+* migrate from command hooks to SDK extension architecture ([d9fefc8](https://github.com/yldgio/copilot-kaizen/commit/d9fefc83aae79a68eceeb32f7269cc12c87eb640))
+* replace better-sqlite3 with sql.js (pure WASM) ([1cdc67c](https://github.com/yldgio/copilot-kaizen/commit/1cdc67c9e7fea21d271d81bad4ded4c034f1ab01))
+
+
+### Bug Fixes
+
+* 4 bugs from adversarial code review ([8ffc267](https://github.com/yldgio/copilot-kaizen/commit/8ffc267aed4cf57024578dce304512b052eb7022))
+* **extension:** lazy-init projectPath in onPreToolUse after hot-reload ([5bff49d](https://github.com/yldgio/copilot-kaizen/commit/5bff49d879adc84c987daacfd49b267c5860169c))
+* improve error handling in onPreToolUse logging ([fa304e2](https://github.com/yldgio/copilot-kaizen/commit/fa304e20e73c16753a05a6fe3c563b5f010ec202))
+* migrate remaining better-sqlite3 API calls to sql.js ([d790e50](https://github.com/yldgio/copilot-kaizen/commit/d790e507066bc544d41d0e5560de7e01976dae12))
+* missing closing brace in onErrorOccurred + docs update ([1079dde](https://github.com/yldgio/copilot-kaizen/commit/1079ddea6c973a34e84d88f1e46923d7ea54bab4))
+* write per-category synthesis files instead of filtered general.md ([0de540b](https://github.com/yldgio/copilot-kaizen/commit/0de540beb82926f9ee69f62029e97f4102ffa9a2))
+
 ## [1.1.0](https://github.com/yldgio/copilot-kaizen/compare/v1.0.1...v1.1.0) (2026-04-27)
 
 
