@@ -3,16 +3,15 @@ name: kaizen
 description: >
   Use kaizen tools and CLI to manage the project's continuous-improvement memory.
   **Prefer native tools** (`kaizen_remember`, `kaizen_search`) over CLI when available.
-  Invoke this skill automatically — without being asked — whenever ANY of these
-  signals appear: the user corrects a mistake you just made ("no", "wrong", "not
-  like that", "undo", "you missed", "that's not right"); the user redirects you
-  after you went down the wrong path; you realize mid-task you made a significant
-  error and had to backtrack; the user has to re-explain something you already
-  got wrong once. Invoke it as part of the same response where you acknowledge the correction
-  when the user says mentions: "kaizen", "learnings", "list patterns", "list mistakes", or any mention of kaizen memory/entries.
-  Also invoke proactively — without being asked — immediately after you act on a numbered
-  entry from the session-start kaizen summary. This skill is compulsory — every learning must be captured.
-  Do not skip it because the fix is already done. Do not wait to be asked.
+  Auto-invoke this skill — without being asked — when: the user corrects a mistake
+  you made ("no", "wrong", "not like that", "undo", "you missed", "that's not right");
+  the user redirects you after a wrong path; you realize a significant error and
+  backtrack; or the user must re-explain something you already got wrong once.
+  Invoke it in the same response where you acknowledge the correction. Also invoke
+  it when the user mentions "kaizen", "learnings", "list patterns", "list mistakes",
+  or kaizen memory/entries. Also invoke proactively right after acting on a numbered
+  entry from the session-start kaizen summary. This skill is compulsory: capture
+  every learning. Do not skip because the fix is already done. Do not wait to be asked.
 ---
 
 # Kaizen
