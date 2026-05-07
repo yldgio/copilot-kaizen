@@ -57,7 +57,7 @@ A one-liner `extension.mjs` at `~/.copilot/extensions/kaizen/` that re-imports t
 _Avoid_: shim, proxy, loader
 
 **Tool** (custom):
-An SDK-registered function exposed to the LLM via `joinSession({ tools })`. Unlike hooks (fired automatically by the CLI), tools are called explicitly by the agent. Kaizen exposes `kaizen_remember` and `kaizen_search`.
+An SDK-registered function exposed to the LLM via `joinSession({ tools })`. Unlike hooks (fired automatically by the CLI), tools are called explicitly by the agent. Kaizen exposes `kaizen_remember`, `kaizen_search`, and `kaizen_debug`.
 _Avoid_: command, action, skill (when referring to SDK tools)
 
 ## Relationships

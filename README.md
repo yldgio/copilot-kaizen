@@ -35,6 +35,7 @@ your conventions, your common mistakes, and your tool preferences.
 │  Tools:                                                  │
 │    kaizen_remember ► Agent saves a learning directly    │
 │    kaizen_search ──► Agent queries existing learnings   │
+│    kaizen_debug ───► Toggle verbose pre-tool logging    │
 └──────────────────────────────────────────────────────────┘
 ```
 
@@ -111,10 +112,13 @@ The extension exposes two SDK tools that the agent can call directly — no bash
 |------|---------|
 | `kaizen_remember` | Save a learning (mistake, convention, pattern, memory, preference) |
 | `kaizen_search` | Query existing learnings by keyword and/or category |
+| `kaizen_debug` | Toggle verbose pre-tool logging (`on` / `off` / `status`) |
 
 These tools are available automatically in any Copilot CLI session where kaizen is installed.
 The agent calls `kaizen_remember` when it detects something worth saving (user corrections,
 discovered patterns, etc.) and `kaizen_search` to check for duplicates before saving.
+`kaizen_debug` is off by default — enabling it shows "no context" warnings per tool call,
+persisted across sessions via `.kaizen/.debug`.
 
 ---
 
