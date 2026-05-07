@@ -41,6 +41,7 @@ let sessionId = null
 let projectPath = null
 let cwd = null
 let injectedTools = new Set()
+let debugMode = false
 
 function isSkipped() {
   return process.env.SKIP_KAIZEN === '1'
@@ -60,6 +61,12 @@ async function onSessionStart(data) {
 
     if (db) { try { db.close() } catch {} }
     db = openDb()
+
+    // Restore debug mode from persistent marker
+    try {
+      const debugMarker = path.join(getKaizenDir(projectPath), '.debug')
+      debugMode = fs.existsSync(debugMarker)
+    } catch { debugMode = false }
 
     let repo
     try {
@@ -116,7 +123,9 @@ async function onPreToolUse(data) {
     })
 
     if (!context) {
-      await session.log(`[kaizen] no context assembled for tool: ${toolName}`, { level: 'warning' })
+      if (debugMode) {
+        await session.log(`[kaizen] no context for tool: ${toolName}`, { level: 'warning' })
+      }
       return {}
     }
     injectedTools.add(toolName)
@@ -222,6 +231,28 @@ async function handleRemember(args) {
   return response
 }
 
+async function handleDebug(args) {
+  const action = args?.action ?? 'status'
+  if (!projectPath) return 'No project path — session may not have started yet.'
+
+  const kaizenDir = getKaizenDir(projectPath)
+  const debugMarker = path.join(kaizenDir, '.debug')
+
+  if (action === 'on') {
+    debugMode = true
+    try { if (fs.existsSync(kaizenDir)) fs.writeFileSync(debugMarker, '') } catch {}
+    return '🔍 Kaizen debug mode ON — verbose tool logs enabled.'
+  }
+
+  if (action === 'off') {
+    debugMode = false
+    try { if (fs.existsSync(debugMarker)) fs.unlinkSync(debugMarker) } catch {}
+    return '🔇 Kaizen debug mode OFF — verbose logs suppressed.'
+  }
+
+  return `Kaizen debug mode: ${debugMode ? 'ON' : 'OFF'}`
+}
+
 async function handleSearch(args) {
   if (!db) return 'Kaizen DB not available — session may not have started yet.'
   if (!projectPath) return 'No project path — session may not have started yet.'
@@ -249,6 +280,24 @@ async function handleSearch(args) {
 }
 
 const TOOL_DEFINITIONS = [
+  {
+    name: 'kaizen_debug',
+    description:
+      'Toggle kaizen verbose debug logging. By default, "no context" warnings are suppressed. ' +
+      'Use action="on" to enable verbose pre-tool logs, "off" to suppress them, "status" to check current state.',
+    parameters: {
+      type: 'object',
+      properties: {
+        action: {
+          type: 'string',
+          enum: ['on', 'off', 'status'],
+          description: '"on" enables verbose logs, "off" suppresses them, "status" shows current state.',
+        },
+      },
+      required: ['action'],
+    },
+    handler: handleDebug,
+  },
   {
     name: 'kaizen_remember',
     description:

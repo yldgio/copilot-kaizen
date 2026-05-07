@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.2.0] (2026-05-07)
+
+### Features
+
+* add `kaizen_debug` tool — toggle verbose pre-tool logs on/off at runtime (default: off)
+  * `action="on"`: enables "no context" warnings per tool; state is persisted in `.kaizen/.debug`
+  * `action="off"`: suppresses verbose logs (default behaviour)
+  * `action="status"`: shows current debug mode state
+
+### Bug Fixes
+
+* suppress noisy "no context assembled for tool" warnings by default — only shown when debug mode is ON
+
+---
+
 ## [1.1.0](https://github.com/yldgio/copilot-kaizen/compare/v1.0.1...v1.1.0) (2026-04-27)
 
 
