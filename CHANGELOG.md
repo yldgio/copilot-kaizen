@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.1.0](https://github.com/yldgio/copilot-kaizen/compare/v2.0.0...v2.1.0) (2026-05-07)
+
+
+### Features
+
+* kaizen_debug tool + suppress noisy pre-tool warnings by default ([2cdad16](https://github.com/yldgio/copilot-kaizen/commit/2cdad163dfb31353e329c26a416e01468184db2c))
+
 ## [2.0.0](https://github.com/yldgio/copilot-kaizen/compare/v1.1.0...v2.0.0) (2026-05-07)
 
 
