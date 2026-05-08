@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.1.1](https://github.com/yldgio/copilot-kaizen/compare/v2.1.0...v2.1.1) (2026-05-08)
+
+
+### Bug Fixes
+
+* lazy-init db/projectPath in handleRemember and handleSearch ([7c84111](https://github.com/yldgio/copilot-kaizen/commit/7c841119b26e6d8d69bc92cef89dc02db0d97a6c))
+
 ## [2.1.0](https://github.com/yldgio/copilot-kaizen/compare/v2.0.0...v2.1.0) (2026-05-07)
 
 
