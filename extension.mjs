@@ -204,9 +204,23 @@ async function onShutdown(data) {
   } catch {}
 }
 
+async function lazyInit() {
+  if (db && projectPath) return true
+  try {
+    if (!cwd) cwd = process.cwd()
+    if (!projectPath) projectPath = getProjectRoot(cwd)
+    if (!sessionId) sessionId = `kaizen_lazy_${Date.now()}_${process.pid}`
+    if (!db) db = openDb()
+    return true
+  } catch {
+    return false
+  }
+}
+
 async function handleRemember(args) {
-  if (!db) return 'Kaizen DB not available — session may not have started yet.'
-  if (!projectPath) return 'No project path — session may not have started yet.'
+  if (!db || !projectPath) {
+    if (!await lazyInit()) return 'Kaizen DB not available — could not initialize.'
+  }
 
   const { category, content } = args ?? {}
   if (!category || !content) return 'Missing required fields: category and content.'
@@ -254,8 +268,9 @@ async function handleDebug(args) {
 }
 
 async function handleSearch(args) {
-  if (!db) return 'Kaizen DB not available — session may not have started yet.'
-  if (!projectPath) return 'No project path — session may not have started yet.'
+  if (!db || !projectPath) {
+    if (!await lazyInit()) return 'Kaizen DB not available — could not initialize.'
+  }
 
   const { query, category, limit: rawLimit } = args ?? {}
   if (!query) return 'Missing required field: query.'
