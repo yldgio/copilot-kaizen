@@ -318,8 +318,8 @@ const TOOL_DEFINITIONS = [
     description:
       'Save a project-specific learning to kaizen memory. Call this when: ' +
       'the user corrects you, teaches a convention or preference, ' +
-      'or you discover a recurring pattern. ' +
-      'Do NOT save transient facts or things already in .kaizen/ files.',
+      'or you discover a recurring pattern. Call whenever an important decision is made, at the end of important tasks or at session end to crystallise the experience. ' +
+      'Do NOT save things already in .kaizen/ files.',
     parameters: {
       type: 'object',
       properties: {
@@ -340,7 +340,9 @@ const TOOL_DEFINITIONS = [
     name: 'kaizen_search',
     description:
       'Search existing kaizen learnings for this project. ' +
-      'Use before saving to avoid duplicates, or to recall project conventions.',
+      'Use before saving to avoid duplicates, or to recall project conventions.' +
+      'ALWAYS call this before answering questions about past experiences, previous decisions, preferences, or anything about the project history. ' +
+      'This is your main way to access the accumulated knowledge in kaizen memory. If no results are found, say so explicitly — never fabricate memories.',
     parameters: {
       type: 'object',
       properties: {
